@@ -1504,8 +1504,6 @@ async function doCertPayout(){
     return;
   }
   const amount=N2(document.getElementById('ecp-amount').value);
-
-  const amount=N2(document.getElementById('ecp-amount').value);
   const dt=document.getElementById('ecp-date').value||today();
   if(!amount||amount<=0)return alert('أدخل مبلغ العائد');
   const remaining=Math.max(0,N2(cert.total_interest)-N2(cert.interest_paid));
