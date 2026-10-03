@@ -6,7 +6,7 @@
 //    • عند انقطاع الشبكة → تُخدَّم الملفات الثابتة من الكاش
 // ══════════════════════════════════════════════════════════════════
 
-const CACHE_VERSION = 'v2.9.0';
+const CACHE_VERSION = 'v3.2.0';
 const CACHE_NAME = 'portfolio-' + CACHE_VERSION;
 
 const STATIC_ASSETS = [
@@ -39,7 +39,10 @@ const STATIC_ASSETS = [
 './js/domain/attachments.js',
 './js/ui/attachments.js',
   './js/domain/auto-recurring.js',
-
+'./js/domain/comparisons.js',
+'./js/domain/recurring-detector.js',
+'./js/ui/pages/comparisons.js',
+'./js/ui/recurring-detector.js',
 ];
 
 // ─── Install: pre-cache app shell ────────────────────────────────
