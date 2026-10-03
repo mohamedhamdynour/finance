@@ -54,7 +54,8 @@ export async function saveCache() {
     debtPayments: DB.debtPayments,
     installments: DB.installments,             // ← جديد
     installmentPayments: DB.installmentPayments, // ← جديد
-    rebalancing: undefined  
+    rebalancing: undefined,
+    attachments: DB.attachments || []
   },
   ts: Date.now(),
   version: 1
