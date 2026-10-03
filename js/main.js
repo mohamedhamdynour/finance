@@ -22,6 +22,7 @@ import { saveCache, loadCache, applyCacheToDB, clearCache, cacheInfo } from './c
 import { ensureChartLoaded } from './ui/charts.js';
 import { installNetworkIndicator, setupNetworkToasts } from './ui/network-indicator.js';
 import { isOnline } from './core/network.js';
+import * as installmentsPage from './ui/pages/installments.js';
 
 // ─── 2) UI Shared ──────────────────────────────────────────────
 import { toast, installToastGlobal } from './ui/toast.js';
@@ -117,7 +118,9 @@ const PAGE_TITLES = {
   prices: ['تحديث الأسعار', 'أسعار السوق الحالية'],
   reports: ['التقارير والتحليل', 'تحليل شامل لمحفظتك'],
   zakat: ['الزكاة', 'حساب الزكاة الشرعية'],
-  settings: ['الإعدادات', 'ضبط متغيرات المحفظة']
+  settings: ['الإعدادات', 'ضبط متغيرات المحفظة'],
+  installments: ['الأقساط والالتزامات المقسّمة', 'تتبع أقساطك ودفعاتك'],
+
 };
 
 function nav(page) {
@@ -142,6 +145,7 @@ function renderPage() {
     else if (p === 'metals') metalsPage.renderMetals();
     else if (p === 'certs') certsPage.renderCerts();
     else if (p === 'debts') debtsPage.renderDebts();
+    else if (p === 'installments') installmentsPage.renderInstallments();
     else if (p === 'recurring') recurringPage.renderRecurring();
     else if (p === 'goals') goalsPage.renderGoals();
     else if (p === 'prices') pricesPage.renderPrices();
@@ -257,23 +261,26 @@ async function loadAll(opts = {}) {
     if (syncEl && !useCache) syncEl.innerHTML = '<span class="sync-dot"></span> جاري التحميل...';
 
     const [banks, bankTxns, stockTxns, stockPrices, metalTxns, metalPrices,
-           certs, dividends, recurring, goals, exRates, snapshots, debts, debtPayments] =
-      await Promise.all([
-        sbGet('banks', '?order=id&deleted_at=is.null'),
-        sbGet('bank_transactions', '?order=date.desc,id.desc&deleted_at=is.null'),
-        sbGet('stock_transactions', '?order=date.asc,id.asc&deleted_at=is.null'),
-        sbGet('stock_prices', '?order=symbol'),
-        sbGet('metal_transactions', '?order=date.asc,id.asc&deleted_at=is.null'),
-        sbGet('metal_prices', '?order=metal_type'),
-        sbGet('certificates', '?order=issued_date.asc&deleted_at=is.null'),
-        sbGet('dividends', '?order=date.desc&deleted_at=is.null'),
-        sbGet('recurring_transactions', '?order=id&deleted_at=is.null'),
-        sbGet('financial_goals', '?order=id&deleted_at=is.null'),
-        sbGet('exchange_rates', '?order=currency'),
-        sbGet('portfolio_snapshots', '?order=snapshot_date.asc&limit=500'),
-        sbGet('debts', '?order=id&deleted_at=is.null'),
-        sbGet('debt_payments', '?order=date.desc&deleted_at=is.null')
-      ]);
+       certs, dividends, recurring, goals, exRates, snapshots, debts, debtPayments,
+       installments, installmentPayments] =
+  await Promise.all([
+    sbGet('banks', '?order=id&deleted_at=is.null'),
+    sbGet('bank_transactions', '?order=date.desc,id.desc&deleted_at=is.null'),
+    sbGet('stock_transactions', '?order=date.asc,id.asc&deleted_at=is.null'),
+    sbGet('stock_prices', '?order=symbol'),
+    sbGet('metal_transactions', '?order=date.asc,id.asc&deleted_at=is.null'),
+    sbGet('metal_prices', '?order=metal_type'),
+    sbGet('certificates', '?order=issued_date.asc&deleted_at=is.null'),
+    sbGet('dividends', '?order=date.desc&deleted_at=is.null'),
+    sbGet('recurring_transactions', '?order=id&deleted_at=is.null'),
+    sbGet('financial_goals', '?order=id&deleted_at=is.null'),
+    sbGet('exchange_rates', '?order=currency'),
+    sbGet('portfolio_snapshots', '?order=snapshot_date.asc&limit=500'),
+    sbGet('debts', '?order=id&deleted_at=is.null'),
+    sbGet('debt_payments', '?order=date.desc&deleted_at=is.null'),
+    sbGet('installments', '?order=id&deleted_at=is.null'),
+    sbGet('installment_payments', '?order=date.desc&deleted_at=is.null')
+  ]);
 
     DB.banks = banks;
     DB.bankTxns = bankTxns;
@@ -289,7 +296,8 @@ async function loadAll(opts = {}) {
     DB.snapshots = snapshots;
     DB.debts = debts;
     DB.debtPayments = debtPayments;
-
+    DB.installments = installments;
+    DB.installmentPayments = installmentPayments;
     // استبعد الحركات المرتبطة ببنوك محذوفة
     const validBankIds = new Set(banks.map(b => b.id));
     DB.bankTxns = DB.bankTxns.filter(t => validBankIds.has(t.bank_id));
@@ -540,6 +548,17 @@ function exposeGlobals() {
   saveCache
   });
 
+
+  // Installments
+Object.assign(window, {
+  saveInstallment: installmentsPage.saveInstallment,
+  editInstallment: installmentsPage.editInstallment,
+  deleteInstallment: installmentsPage.deleteInstallment,
+  openInstallmentPay: installmentsPage.openInstallmentPay,
+  saveInstallmentPayment: installmentsPage.saveInstallmentPayment,
+  deleteInstallmentPayment: installmentsPage.deleteInstallmentPayment,
+  autoCalcInstallmentAmount: installmentsPage.autoCalcInstallmentAmount
+});
   // Settings helpers (تُستدعى من innerHTML بـ window.__)
   window.__renameSettingsCurrency = renameSettingsCurrency;
   window.__removeSettingsCurrency = removeSettingsCurrency;
