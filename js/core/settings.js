@@ -233,6 +233,23 @@ export function renderSettings() {
       : '<span style="color:var(--gold)">⚠ الإعدادات محفوظة على هذا الجهاز فقط.</span>';
   }
 
+  // ابحث عن modeEl ثم أضف بعدها:
+const cacheInfoEl = document.getElementById('st-cache-info');
+if (cacheInfoEl && typeof window.cacheInfo === 'function') {
+  window.cacheInfo().then(info => {
+    if (!info) {
+      cacheInfoEl.innerHTML = '<span style="color:var(--muted)">لا يوجد كاش محفوظ بعد.</span>';
+      return;
+    }
+    const ageMin = info.age.toFixed(1);
+    const sizeKB = (info.size / 1024).toFixed(1);
+    cacheInfoEl.innerHTML = `
+      <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;font-size:12px">
+        <span style="color:var(--muted)">عمر الكاش: <strong>${ageMin} دقيقة</strong> • الحجم: <strong>${sizeKB} KB</strong></span>
+        <button onclick="window.clearCache().then(()=>location.reload())" style="background:var(--red-l);color:var(--red-d);border:none;padding:5px 12px;border-radius:6px;cursor:pointer;font-size:11px;font-family:inherit;font-weight:700">مسح</button>
+      </div>`;
+  });
+}
   renderSchemaAlert();
 }
 
