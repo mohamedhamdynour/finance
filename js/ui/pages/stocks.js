@@ -1,16 +1,18 @@
 // ══════════════════════════════════════════════════════════════════
-//  pages/stocks.js — الأسهم والصناديق + التوزيعات
+//  pages/stocks.js — الأسهم والصناديق + التوزيعات + Undo
 // ══════════════════════════════════════════════════════════════════
-import { DB, UI, marketCtx } from '../../state.js';
+import { DB, UI, marketCtx, editCtx } from '../../state.js';
 import { N2, fmt, fmtN, pct, today, sign, cls, escapeHtml, MARKET_COLORS, MARKET_NAMES } from '../../core/utils.js';
 import { sbPost, sbPatch, sbDel, sbUpsert } from '../../core/supabase.js';
 import { toast } from '../toast.js';
 import { deleteWithUndo } from '../undo.js';
-import { kpi, svgIcon, typeTag, populateSelect, renderInsightsCard } from '../shared.js';
-import { openModal, closeModal, populateSellSyms } from '../modals.js';
+import { kpi, svgIcon, typeTag, populateSelect } from '../shared.js';
+import { openModal, closeModal } from '../modals.js';
 import { calcTotals, getHoldings, getStockPrice } from '../../domain/calc.js';
 
 const reload = () => window.loadAll?.();
+
+// ══════════════════ Render ══════════════════
 
 export function renderStocks() {
   const mf = marketCtx.activeStockMarket || 'ALL';
@@ -84,12 +86,11 @@ export function renderStocks() {
       }).join('')
     : `<div class="empty-state" style="padding:32px;text-align:center;color:var(--muted);grid-column:1/-1"><p>لا توجد حيازات${mf !== 'ALL' ? ' في سوق ' + escapeHtml(mf) : ''}</p></div>`;
 
-  let txns = [...DB.stockTxns].filter(t => mf === 'ALL' || (t.market || 'EGX') === mf).reverse();
-  txns = txns.filter(t => t.date >= (UI.globalPeriod === 'custom' ? (UI.customFrom || '2000-01-01') : '2000-01-01'));
+  const txns = [...DB.stockTxns].filter(t => mf === 'ALL' || (t.market || 'EGX') === mf).reverse();
   document.getElementById('stock-txns-tbody').innerHTML = txns.length ? txns.map(t => {
     const bank = DB.banks.find(b => b.id === t.bank_id);
     const bc = bank ? (bank.color || '#3b82f6') : '#888';
-    return `<tr style="border-right:2px solid ${bc}22">
+    return `<tr data-row-id="${t.id}" style="border-right:2px solid ${bc}22">
       <td>${t.date}</td><td>${typeTag(t.type)}</td>
       <td class="td-sym" style="font-weight:900">${escapeHtml(t.symbol)}</td>
       <td class="muted" style="font-size:11px">${escapeHtml(t.name || '')}</td>
@@ -133,7 +134,7 @@ export function renderDividends() {
   document.getElementById('div-tbody').innerHTML = DB.dividends.length
     ? DB.dividends.map(d => {
         const bank = DB.banks.find(b => b.id === d.bank_id);
-        return `<tr>
+        return `<tr data-row-id="${d.id}">
           <td>${d.date}</td><td class="td-sym">${escapeHtml(d.symbol)}</td>
           <td style="color:var(--green);font-weight:700">${fmt(d.amount)}</td>
           <td class="muted">${bank ? escapeHtml(bank.name) : '—'}</td>
@@ -146,6 +147,8 @@ export function renderDividends() {
       }).join('')
     : `<tr><td colspan="6" style="text-align:center;padding:24px;color:var(--muted)">لا توجد توزيعات</td></tr>`;
 }
+
+// ══════════════════ Actions ══════════════════
 
 export function autoFillStock() {
   const sym = document.getElementById('ebuy-sym').value.trim().toUpperCase();
@@ -241,10 +244,12 @@ export async function doSell() {
   } catch (e) { toast('خطأ: ' + e.message, false); }
 }
 
+// ✅ Undo: حذف عملية سهم
 export async function deleteStockTxn(id) {
   const txn = DB.stockTxns.find(t => t.id === id);
   if (!txn) return;
-  await deleteWithUndo('stock_transactions', id, `${txn.symbol} ${txn.type}`, async () => {
+  const label = `${txn.symbol} ${txn.type}`;
+  await deleteWithUndo('stock_transactions', id, label, async () => {
     if (txn.bank_transaction_id) {
       try { await sbDel('bank_transactions', txn.bank_transaction_id); } catch (e) {}
     }
@@ -316,7 +321,8 @@ export function addMoreStock(sym) {
   openModal('modal-buy');
 }
 
-// ═══ Dividend actions ═══
+// ══════════════════ Dividends ══════════════════
+
 export async function saveDividend() {
   const id = document.getElementById('ediv-id').value;
   const sym = document.getElementById('ediv-sym').value.toUpperCase().trim();
@@ -379,14 +385,14 @@ export function editDividend(id) {
   openModal('modal-dividend');
 }
 
+// ✅ Undo: حذف توزيع أرباح
 export async function deleteDividend(id) {
   const div = DB.dividends.find(d => d.id === id);
   if (!div) return;
-  await deleteWithUndo('dividends', id, `توزيع ${div.symbol}`, async () => {
+  const label = `توزيع ${div.symbol}`;
+  await deleteWithUndo('dividends', id, label, async () => {
     if (div.bank_transaction_id) {
       try { await sbDel('bank_transactions', div.bank_transaction_id); } catch (e) {}
     }
   });
 }
-
-import { editCtx } from '../../state.js';
