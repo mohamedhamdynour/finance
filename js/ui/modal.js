@@ -231,3 +231,186 @@ export function quickSellMetal(key) {
     if (el) { el.value = key; updateMetalSellPreview(); }
   }, 30);
 }
+
+export function updateDepPreview() {
+  const bid = +document.getElementById('ed-bank').value;
+  const amt = N2(document.getElementById('ed-amount').value);
+  const b = DB.banks.find(x => x.id === bid);
+  const el = document.getElementById('dep-preview');
+  if (!el) return;
+  if (!b || !amt) { el.innerHTML = ''; return; }
+  const after = N2(b.balance) + amt;
+  el.innerHTML = previewBox([
+    ['الرصيد الحالي', fmt(b.balance) + ' ' + (b.currency || 'EGP')],
+    ['المبلغ المُضاف', '+' + fmt(amt), 'color:var(--green)'],
+    ['الرصيد بعد العملية', fmt(after) + ' ' + (b.currency || 'EGP'), 'color:var(--green);font-weight:900']
+  ]);
+}
+
+export function updateWitPreview() {
+  const bid = +document.getElementById('ew-bank').value;
+  const amt = N2(document.getElementById('ew-amount').value);
+  const b = DB.banks.find(x => x.id === bid);
+  const el = document.getElementById('wit-preview');
+  if (!el) return;
+  if (!b || !amt) { el.innerHTML = ''; return; }
+  const after = N2(b.balance) - amt;
+  const ok = after >= 0;
+  el.innerHTML = previewBox([
+    ['الرصيد الحالي', fmt(b.balance) + ' ' + (b.currency || 'EGP')],
+    ['المبلغ المسحوب', '-' + fmt(amt), 'color:var(--red)'],
+    ['الرصيد بعد العملية', fmt(after) + ' ' + (b.currency || 'EGP'), ok ? 'color:var(--green);font-weight:900' : 'color:var(--red);font-weight:900']
+  ]) + (!ok ? `<div style="color:var(--red);font-size:11px;margin-top:6px;font-weight:700">الرصيد غير كافٍ</div>` : '');
+}
+
+export function updateTransferPreview() {
+  const fromId = +document.getElementById('etr-from').value;
+  const toId = +document.getElementById('etr-to').value;
+  const amt = N2(document.getElementById('etr-amount').value);
+  const from = DB.banks.find(x => x.id === fromId);
+  const to = DB.banks.find(x => x.id === toId);
+  const el = document.getElementById('transfer-preview');
+  if (!el) return;
+  if (!from || !to || !amt) { el.innerHTML = ''; return; }
+  const fromCur = from.currency || 'EGP', toCur = to.currency || 'EGP';
+  const egpAmt = toEGP(amt, fromCur);
+  const toAmt = toCur === fromCur ? amt : (toCur === baseCur() ? egpAmt : egpAmt / getRate(toCur));
+  const fromAfter = N2(from.balance) - amt;
+  const ok = fromAfter >= 0;
+  el.innerHTML = previewBox([
+    [`من: ${from.name}`, `${fmt(from.balance)} ${fromCur} ← ${fmt(fromAfter)} ${fromCur}`, fromAfter >= 0 ? 'color:var(--green)' : 'color:var(--red)'],
+    [`إلى: ${to.name}`, `${fmt(N2(to.balance))} ${toCur} ← ${fmt(N2(to.balance) + toAmt)} ${toCur}`, 'color:var(--blue)'],
+    fromCur !== toCur ? ['المبلغ المُحوَّل', `${fmtN(toAmt, 2)} ${toCur} (بسعر ${fmtN(getRate(fromCur))} = 1 ${fromCur})`, 'color:var(--muted)'] : null
+  ]) + (!ok ? `<div style="color:var(--red);font-size:11px;margin-top:6px;font-weight:700">الرصيد في ${escapeHtml(from.name)} غير كافٍ</div>` : '');
+}
+
+export function updateBuyPreview() {
+  const q = N2(document.getElementById('ebuy-qty').value);
+  const p = N2(document.getElementById('ebuy-price').value);
+  const c = N2(document.getElementById('ebuy-comm').value);
+  const cf = N2(document.getElementById('ebuy-comm-fixed').value);
+  const el = document.getElementById('buy-preview');
+  if (!el) return;
+  if (!q || !p) { el.innerHTML = ''; return; }
+  const total = q * p, comm = total * c / 100, net = total + comm + cf;
+  el.innerHTML = previewBox([
+    ['الإجمالي', fmt(total)],
+    ['العمولة (' + c + '%)', '+' + fmt(comm), 'color:var(--red)'],
+    cf > 0 ? ['عمولة ثابتة', '+' + fmt(cf), 'color:var(--red)'] : null,
+    ['الصافي المدفوع', fmt(net), 'color:var(--blue);font-weight:900']
+  ]);
+}
+
+export function updateSellPreview() {
+  const sym = document.getElementById('esell-sym').value;
+  const q = N2(document.getElementById('esell-qty').value);
+  const p = N2(document.getElementById('esell-price').value);
+  const c = N2(document.getElementById('esell-comm').value);
+  const cf = N2(document.getElementById('esell-comm-fixed').value);
+  const el = document.getElementById('sell-preview');
+  if (!el) return;
+  if (!sym || !q || !p) { el.innerHTML = ''; return; }
+  const h = getHoldings(), hld = h[sym];
+  if (!hld) return;
+  const total = q * p, comm = total * c / 100, net = total - comm - cf;
+  const profit = net - hld.avgPrice * q;
+  const newQty = hld.qty - q, newCost = hld.totalCost - hld.avgPrice * q;
+  const newAvg = newQty > 0 ? newCost / newQty : 0;
+  const qOk = q <= hld.qty;
+  el.innerHTML = previewBox([
+    ['الإجمالي', fmt(total)],
+    ['العمولة (' + c + '%)', '-' + fmt(comm), 'color:var(--red)'],
+    cf > 0 ? ['عمولة ثابتة', '-' + fmt(cf), 'color:var(--red)'] : null,
+    ['الصافي المستلم', fmt(net), 'color:var(--green);font-weight:900'],
+    ['ربح / خسارة هذه الصفقة', (profit >= 0 ? '+' : '') + fmt(profit), profit >= 0 ? 'color:var(--green);font-weight:800' : 'color:var(--red);font-weight:800'],
+    ['متوسط التكلفة الجديد', newQty > 0 ? fmtN(newAvg) + ' ' + baseCur() : 'لا يوجد مخزون', 'color:var(--purple)']
+  ]) + (!qOk ? `<div style="color:var(--red);font-size:11px;margin-top:6px;font-weight:700">الكمية (${q}) أكبر من المملوك (${fmtN(hld.qty, 2)})</div>` : '');
+}
+
+export function updateMetalBuyPreview() {
+  const w = N2(document.getElementById('emb-weight').value);
+  const p = N2(document.getElementById('emb-price').value);
+  const mf = N2(document.getElementById('emb-manuf').value);
+  const cf = N2(document.getElementById('emb-fixed').value);
+  const el = document.getElementById('metal-buy-preview');
+  if (!el) return;
+  if (!w || !p) { el.innerHTML = ''; return; }
+  const total = w * p, manuf = mf * w, net = total + manuf + cf;
+  el.innerHTML = previewBox([
+    ['الإجمالي (' + fmtN(w, 3) + ' جم × ' + fmtN(p) + ' ' + baseCur() + ')', fmt(total)],
+    manuf > 0 ? ['رسوم التصنيع', '+' + fmt(manuf), 'color:var(--red)'] : null,
+    cf > 0 ? ['عمولة ثابتة', '+' + fmt(cf), 'color:var(--red)'] : null,
+    ['الصافي المدفوع', fmt(net), 'color:var(--gold);font-weight:900'],
+    ['تكلفة الجرام الفعلية', fmtN(w > 0 ? net / w : 0) + ' ' + baseCur() + '/جم', 'color:var(--muted)']
+  ]);
+}
+
+export function updateMetalSellPreview() {
+  const type = document.getElementById('ems-type').value;
+  const w = N2(document.getElementById('ems-weight').value);
+  const p = N2(document.getElementById('ems-price').value);
+  const cb = N2(document.getElementById('ems-cashback').value);
+  const el = document.getElementById('metal-sell-preview');
+  if (!el) return;
+  if (!type || !w || !p) { el.innerHTML = ''; return; }
+  const mh = getMetalHoldings(), hld = mh[type];
+  if (!hld) return;
+  const net = w * p + cb;
+  const wOk = w <= hld.weight;
+  const pnl = net - hld.avgPrice * w;
+  el.innerHTML = previewBox([
+    ['الإجمالي', fmt(w * p)],
+    cb > 0 ? ['كاش باك', '+' + fmt(cb), 'color:var(--green)'] : null,
+    ['الصافي المستلم', fmt(net), 'color:var(--green);font-weight:900'],
+    ['ربح / خسارة', (pnl >= 0 ? '+' : '') + fmt(pnl), pnl >= 0 ? 'color:var(--green);font-weight:800' : 'color:var(--red);font-weight:800'],
+    ['الوزن المملوك', fmtN(hld.weight, 3) + ' جم', wOk ? '' : 'color:var(--red)']
+  ]) + (!wOk ? `<div style="color:var(--red);font-size:11px;margin-top:6px;font-weight:700">الوزن أكبر من المملوك</div>` : '');
+}
+
+export function updateCertPreview() {
+  const amount = N2(document.getElementById('ecert-amount').value);
+  const rate = N2(document.getElementById('ecert-rate').value);
+  const dur = N2(document.getElementById('ecert-dur').value);
+  const payout = document.getElementById('ecert-payout').value;
+  const el = document.getElementById('cert-preview');
+  if (!el) return;
+  if (!amount || !rate) { el.innerHTML = ''; return; }
+  const totalInt = amount * rate / 100 * dur;
+  const periodsMap = { 'سنوي': dur, 'شهري': dur * 12, 'أسبوعي': dur * 52, 'يومي': dur * 365 };
+  const periods = periodsMap[payout] || dur;
+  const perPeriod = periods > 0 ? totalInt / periods : 0;
+  el.innerHTML = previewBox([
+    ['الفائدة السنوية', fmt(amount * rate / 100), 'color:var(--green)'],
+    ['العائد لكل ' + payout, fmt(perPeriod), 'color:var(--purple)'],
+    ['إجمالي الفائدة (' + dur + ' سنة)', fmt(totalInt), 'color:var(--green)'],
+    ['القيمة الإجمالية عند الاستحقاق', fmt(amount + totalInt), 'color:var(--purple);font-weight:900']
+  ]);
+}
+
+export function updateCertBreakPreview() {
+  const certId = +document.getElementById('ecb-cert').value;
+  const fee = N2(document.getElementById('ecb-fee').value);
+  const breakDate = document.getElementById('ecb-date').value;
+  const cert = DB.certs.find(c => c.id === certId);
+  const el = document.getElementById('cert-break-preview');
+  if (!el) return;
+  if (!cert) { el.innerHTML = ''; return; }
+  const now = new Date(breakDate || today());
+  const issued = new Date(cert.issued_date), mat = new Date(cert.maturity_date);
+  const isEarly = now < mat;
+  const daysHeld = Math.max(0, Math.ceil((now - issued) / 86400000));
+  const totalDays = Math.max(1, Math.ceil((mat - issued) / 86400000));
+  const earnedInterest = isEarly ? (N2(cert.total_interest) * daysHeld / totalDays) : N2(cert.total_interest);
+  const alreadyPaid = N2(cert.interest_paid);
+  const remainingInterest = Math.max(0, earnedInterest - alreadyPaid);
+  const refund = N2(cert.amount) + remainingInterest - fee;
+  el.innerHTML = previewBox([
+    ['المبلغ الأصلي', fmt(cert.amount)],
+    ['عائد مستحق (' + daysHeld + ' يوم)', fmt(remainingInterest), 'color:var(--green)'],
+    fee > 0 ? ['رسوم الكسر', '-' + fmt(fee), 'color:var(--red)'] : null,
+    isEarly ? ['ملاحظة', 'كسر قبل الاستحقاق — عائد جزئي فقط', 'color:var(--gold)'] : null,
+    ['المبلغ المسترد', fmt(Math.max(0, refund)), refund >= N2(cert.amount) ? 'color:var(--green);font-weight:900' : 'color:var(--gold);font-weight:900']
+  ]);
+  window._certBreakRefund = Math.max(0, refund);
+  window._certBreakEarnedInt = remainingInterest;
+}
