@@ -38,6 +38,8 @@ const STATIC_ASSETS = [
 './js/ui/pages/forecast.js',
 './js/domain/attachments.js',
 './js/ui/attachments.js',
+  './js/domain/auto-recurring.js',
+
 ];
 
 // ─── Install: pre-cache app shell ────────────────────────────────
