@@ -626,35 +626,88 @@ body.dark .skel {
 }
 
 /* ══════════════════════════════════════════════ */
-/*  TOAST مع ACTION BUTTON (لـ Undo)             */
+/*  TOAST مع ACTION + PROGRESS                    */
 /* ══════════════════════════════════════════════ */
-.toast.with-action {
+#toast {
+  position: fixed !important;
+  bottom: 24px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 99999 !important;
+  min-width: 260px;
+  max-width: 90vw;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 18px;
+  background: #0f1729;
+  color: #f0f4ff;
+  border-radius: 12px;
+  font-size: 13px;
+  font-weight: 700;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity .25s, transform .25s;
+  box-shadow: 0 20px 60px rgba(0,0,0,.5);
+  border: .5px solid rgba(255,255,255,.1);
+  overflow: hidden;
+  font-family: var(--font);
+}
+#toast.show {
+  opacity: 1;
   pointer-events: auto;
-  min-width: 300px;
-  padding: 12px 16px;
-  justify-content: space-between;
+  transform: translateX(-50%) translateY(0);
+}
+#toast.with-action {
+  min-width: 340px;
+  padding: 14px 18px;
+  padding-left: 120px; /* مساحة للزر */
+}
+#toast svg {
+  width: 16px;
+  height: 16px;
+  stroke: currentColor;
+  stroke-width: 2.5;
+  fill: none;
+  flex-shrink: 0;
+}
+#toast.ok svg { stroke: #34d399; }
+#toast.err svg { stroke: #fb7185; }
+#toast > #toast-msg {
+  flex: 1;
+  line-height: 1.4;
 }
 .toast-action-btn {
+  position: absolute;
+  left: 14px;
+  top: 50%;
+  transform: translateY(-50%);
   background: rgba(255,255,255,.15);
   color: #fff;
-  border: 1px solid rgba(255,255,255,.25);
-  border-radius: 6px;
-  padding: 5px 12px;
-  font-size: 11.5px;
-  font-weight: 700;
+  border: 1px solid rgba(255,255,255,.3);
+  border-radius: 8px;
+  padding: 7px 14px;
+  font-size: 12px;
+  font-weight: 800;
   font-family: var(--font);
   cursor: pointer;
-  margin-right: 8px;
   transition: all .15s;
   white-space: nowrap;
+  z-index: 2;
 }
-.toast-action-btn:hover { background: rgba(255,255,255,.25); }
+.toast-action-btn:hover {
+  background: rgba(255,255,255,.3);
+  transform: translateY(-50%) scale(1.05);
+}
+.toast-action-btn:active {
+  transform: translateY(-50%) scale(.95);
+}
 .toast-progress {
   position: absolute;
   bottom: 0;
   right: 0;
-  height: 2px;
-  background: #34d399;
-  transition: width 5s linear;
+  height: 3px;
+  background: linear-gradient(90deg, #34d399, #10b981);
+  border-radius: 0 0 12px 0;
+  width: 100%;
 }
-.toast.show .toast-progress { width: 0%; }
