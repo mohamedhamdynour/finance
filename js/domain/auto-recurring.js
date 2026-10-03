@@ -72,26 +72,38 @@ async function applyOne(r) {
   const bank = DB.banks.find(b => b.id === r.bank_id);
   if (!bank) throw new Error('الحساب البنكي غير موجود');
 
-  // تحقق من كفاية الرصيد للسحب
-  if (r.type === 'سحب' && N2(bank.balance) < N2(r.amount)) {
-    throw new Error(`الرصيد غير كافٍ (المتاح: ${N2(bank.balance).toLocaleString('ar-EG')})`);
+  let iterations = 0;
+  const MAX_ITER = 60; // حد أقصى 60 دفعة (5 سنوات للمتكرر الشهري)
+
+  while (nextRecDate(r) <= today() && iterations < MAX_ITER) {
+    if (r.type === 'سحب' && N2(bank.balance) < N2(r.amount)) {
+      throw new Error(`الرصيد غير كافٍ بعد ${iterations} دفعة`);
+    }
+
+    const next = nextRecDate(r);
+    await sbPost('bank_transactions', [{
+      bank_id: r.bank_id,
+      type: r.type,
+      amount: N2(r.amount),
+      date: next,
+      notes: r.name + ' (تلقائي)',
+      category: 'متكرر - تلقائي'
+    }]);
+
+    await sbPatch('recurring_transactions', r.id, { last_applied: next });
+
+    // حدّث الكائن محلياً للحلقة التالية
+    r.last_applied = next;
+
+    // خصم/إضافة للرصيد المحلي (لأن الـ trigger يُحدّث DB)
+    if (r.type === 'سحب') {
+      bank.balance = N2(bank.balance) - N2(r.amount);
+    } else {
+      bank.balance = N2(bank.balance) + N2(r.amount);
+    }
+
+    iterations++;
   }
-
-  const next = nextRecDate(r);
-  const isIn = r.type === 'إيداع';
-
-  // أنشئ الحركة البنكية (trigger يتولى تحديث الرصيد)
-  await sbPost('bank_transactions', [{
-    bank_id: r.bank_id,
-    type: r.type,
-    amount: N2(r.amount),
-    date: next,
-    notes: r.name + ' (تلقائي)',
-    category: 'متكرر - تلقائي'
-  }]);
-
-  // حدّث last_applied
-  await sbPatch('recurring_transactions', r.id, { last_applied: next });
 }
 
 /**
