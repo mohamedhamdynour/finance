@@ -1503,7 +1503,7 @@ async function doCertPayout(){
     }catch(e){console.error('doCertPayout(schedule):',e);toast('خطأ: '+e.message,false)}
     return;
   }
-  const amount=N2(document.getElementById('ecp-amount').value);
+  const amount=N2(document.getElementById('ecp-amount').value);    // ← سطر واحد فقط ✅
   const dt=document.getElementById('ecp-date').value||today();
   if(!amount||amount<=0)return alert('أدخل مبلغ العائد');
   const remaining=Math.max(0,N2(cert.total_interest)-N2(cert.interest_paid));
