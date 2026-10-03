@@ -2,7 +2,8 @@
 //  pages/reports.js — التقارير والتحليل + تصدير PDF/Excel
 // ══════════════════════════════════════════════════════════════════
 import { DB, UI, APP_SETTINGS, CHARTS } from '../../state.js';
-import { N2, fmt, fmtN, fmtK, pct, sign, cls, today, escapeHtml, getBankColor, toEGP, baseCur, PALETTE, MARKET_NAMES, MARKET_COLORS } from '../../core/utils.js';
+import { N2, fmt, fmtN, fmtK, pct, sign, cls, today, escapeHtml, getBankColor, toEGP, baseCur, MARKET_NAMES, MARKET_COLORS } from '../../core/utils.js';
+import { PALETTE } from '../charts.js';
 import { toast } from '../toast.js';
 import { kpi, svgIcon, getReportPeriodBounds } from '../shared.js';
 import { mkPie, mkBar, mkLine, destroyChart } from '../charts.js';
