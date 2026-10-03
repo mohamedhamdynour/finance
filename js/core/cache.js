@@ -53,7 +53,8 @@ export async function saveCache() {
     debts: DB.debts,
     debtPayments: DB.debtPayments,
     installments: DB.installments,             // ← جديد
-    installmentPayments: DB.installmentPayments // ← جديد
+    installmentPayments: DB.installmentPayments, // ← جديد
+    rebalancing: undefined  
   },
   ts: Date.now(),
   version: 1
