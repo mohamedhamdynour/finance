@@ -26,6 +26,8 @@ import * as installmentsPage from './ui/pages/installments.js';
 import * as rebalancingPage from './ui/pages/rebalancing.js';
 import * as riskPage from './ui/pages/risk.js';
 import * as forecastPage from './ui/pages/forecast.js';
+import { installAttachmentHandlers } from './ui/attachments.js';
+import { attachmentsCount } from './domain/attachments.js';
 
 // ─── 2) UI Shared ──────────────────────────────────────────────
 import { toast, installToastGlobal } from './ui/toast.js';
@@ -288,7 +290,8 @@ async function loadAll(opts = {}) {
     sbGet('debts', '?order=id&deleted_at=is.null'),
     sbGet('debt_payments', '?order=date.desc&deleted_at=is.null'),
     sbGet('installments', '?order=id&deleted_at=is.null'),
-    sbGet('installment_payments', '?order=date.desc&deleted_at=is.null')
+    sbGet('installment_payments', '?order=date.desc&deleted_at=is.null'),
+    sbGet('attachments', '?order=created_at.desc&deleted_at=is.null'),
   ]);
 
     DB.banks = banks;
@@ -307,6 +310,7 @@ async function loadAll(opts = {}) {
     DB.debtPayments = debtPayments;
     DB.installments = installments;
     DB.installmentPayments = installmentPayments;
+    DB.attachments = attachments;
     // استبعد الحركات المرتبطة ببنوك محذوفة
     const validBankIds = new Set(banks.map(b => b.id));
     DB.bankTxns = DB.bankTxns.filter(t => validBankIds.has(t.bank_id));
@@ -574,6 +578,7 @@ Object.assign(window, {
   autoCalcInstallmentAmount: installmentsPage.autoCalcInstallmentAmount
 });
   // Settings helpers (تُستدعى من innerHTML بـ window.__)
+  window.__DB__ = DB;   // لفتح المرفقات
   saveForecastSettings: forecastPage.saveForecastSettings,
   window.__renameSettingsCurrency = renameSettingsCurrency;
   window.__removeSettingsCurrency = removeSettingsCurrency;
@@ -600,5 +605,6 @@ if ('serviceWorker' in navigator && !navigator.serviceWorker.controller) {
 }
 installNetworkIndicator();
 setupNetworkToasts();
+installAttachmentHandlers();
 
 console.log('[main] Portfolio Pro bootstrapped');
