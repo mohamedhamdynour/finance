@@ -70,6 +70,9 @@ export const APP_SETTINGS = {
     monthsBack: 6,
     monthlyContribution: null
   },
+  comparisons: {
+    defaultTab: 'mom'
+  },
 };
 
 // ─── حالة الاتصال والمصادقة ────────────────────────────────────
