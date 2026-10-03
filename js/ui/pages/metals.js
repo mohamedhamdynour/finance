@@ -5,6 +5,7 @@ import { DB, UI, editCtx } from '../../state.js';
 import { N2, fmt, fmtN, pct, today, sign, cls, escapeHtml, baseCur } from '../../core/utils.js';
 import { sbPost, sbPatch, sbDel, sbUpsert } from '../../core/supabase.js';
 import { toast } from '../toast.js';
+import { deleteWithUndo } from '../undo.js';
 import { kpi, svgIcon, typeTag, populateSelect } from '../shared.js';
 import { openModal, closeModal } from '../modals.js';
 import { calcTotals, getMetalHoldings, getMetalPrice } from '../../domain/calc.js';
@@ -167,12 +168,12 @@ export async function doMetalSell() {
 
 export async function deleteMetalTxn(id) {
   const txn = DB.metalTxns.find(t => t.id === id);
-  if (!txn || !confirm('حذف هذه العملية وعكس أثرها البنكي؟')) return;
-  try {
-    if (txn.bank_transaction_id) { try { await sbDel('bank_transactions', txn.bank_transaction_id); } catch (e) {} }
-    await sbDel('metal_transactions', id);
-    toast('تم الحذف'); await reload();
-  } catch (e) { toast('خطأ: ' + e.message, false); }
+  if (!txn) return;
+  await deleteWithUndo('metal_transactions', id, `${txn.metal_type} ${txn.op}`, async () => {
+    if (txn.bank_transaction_id) {
+      try { await sbDel('bank_transactions', txn.bank_transaction_id); } catch (e) {}
+    }
+  });
 }
 
 export function editMetalTxn(id) {
