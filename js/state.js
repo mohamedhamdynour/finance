@@ -58,7 +58,11 @@ export const APP_SETTINGS = {
     basis: 'gold',
     include: {},
     history: []
-  }
+  },
+  rebalancing: {
+    targets: { banks: 25, stocks: 45, metals: 20, certs: 10 },
+    threshold: 5
+  },
 };
 
 // ─── حالة الاتصال والمصادقة ────────────────────────────────────
