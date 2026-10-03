@@ -1,18 +1,18 @@
 // ══════════════════════════════════════════════════════════════════
-//  pages/reports.js — التقارير والتحليل + تصدير PDF
+//  pages/reports.js — التقارير والتحليل + تصدير PDF/Excel
 // ══════════════════════════════════════════════════════════════════
 import { DB, UI, APP_SETTINGS, CHARTS } from '../../state.js';
-import { N2, fmt, fmtN, fmtK, pct, sign, cls, today, escapeHtml, getBankColor, toEGP, baseCur, MARKET_NAMES, MARKET_COLORS } from '../../core/utils.js';
-import { PALETTE } from '../charts.js';
+import { N2, fmt, fmtN, fmtK, pct, sign, cls, today, escapeHtml, getBankColor, toEGP, baseCur, PALETTE, MARKET_NAMES, MARKET_COLORS } from '../../core/utils.js';
 import { toast } from '../toast.js';
 import { kpi, svgIcon, getReportPeriodBounds } from '../shared.js';
 import { mkPie, mkBar, mkLine, destroyChart } from '../charts.js';
 import { calcTotals, calcTotalsForPeriod, getHoldings, getMetalHoldings, getStockPrice, getMetalPrice } from '../../domain/calc.js';
 
-// ─── الألوان لرسوم Chart.js ───
 const isDark = () => document.body.classList.contains('dark');
 const gc = () => isDark() ? '#1e2d47' : '#e8edf5';
 const tc = () => isDark() ? '#4a6080' : '#7a8ba8';
+
+// ══════════════════ Render الرئيسي ══════════════════
 
 export function renderReports() {
   const { pStart, pEnd } = getReportPeriodBounds();
@@ -29,14 +29,15 @@ export function renderReports() {
   const lu = document.getElementById('r-last-update');
   if (lu) lu.textContent = new Date().toLocaleString('ar-EG') + ' | الفترة: ' + periodLabel;
 
+  // ═══ KPIs ═══
   document.getElementById('report-kpis').innerHTML =
-    kpi('إجمالي المحفظة', fmt(grand), 'القيمة السوقية الحالية', 'var(--blue)', svgIcon('<path d="M12 2L2 7l10 5 10-5-10-5z"/>'), roi) +
-    kpi('رأس المال المستثمر', fmt(invested + totalBanks), 'إجمالي ما تم ضخه', 'var(--muted)', svgIcon('<line x1="12" y1="1" x2="12" y2="23"/>')) +
+    kpi('إجمالي المحفظة', fmt(grand), 'القيمة السوقية الحالية', 'var(--blue)', svgIcon('<path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/>'), roi) +
+    kpi('رأس المال المستثمر', fmt(invested + totalBanks), 'إجمالي ما تم ضخه', 'var(--muted)', svgIcon('<line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6"/>')) +
     kpi('العائد الصافي', fmt(totalPnl), (roi >= 0 ? '+' : '') + roi.toFixed(2) + '% ROI', totalPnl >= 0 ? 'var(--green)' : 'var(--red)', svgIcon('<polyline points="22 7 13.5 15.5 8.5 10.5 2 17"/>'), roi) +
     kpi('دخل الفترة', fmt(certsPaid + divTotal + realizedStockPnl), 'عوائد + توزيعات + مبيعات', 'var(--teal)', svgIcon('<polyline points="20 6 9 17 4 12"/>')) +
     (debtsOwed > 0 ? kpi('صافي الثروة', fmt(grand - debtsOwed), 'المحفظة ناقص الالتزامات', grand - debtsOwed >= 0 ? 'var(--green)' : 'var(--red)', svgIcon('<path d="M20.84 4.61a5.5 5.5 0 00-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 00-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 000-7.78"/>')) : '');
 
-  // ─── بطاقات الفئات ───
+  // ═══ بطاقات الفئات ═══
   const catEl = document.getElementById('r-category-cards');
   if (catEl) catEl.innerHTML = [
     { l: 'البنوك', v: totalBanks, p: grand ? totalBanks / grand * 100 : 0, sub: DB.banks.filter(b => b.is_active !== false).length + ' حساب', c: 'var(--teal)', pnl: null },
@@ -51,7 +52,7 @@ export function renderReports() {
     ${c.pnl != null ? `<div style="font-size:11px;margin-top:6px;font-weight:700;color:${c.pnl >= 0 ? 'var(--green)' : 'var(--red)'}">${c.pnl >= 0 ? 'ربح' : 'خسارة'}: ${fmt(Math.abs(c.pnl))}</div>` : ''}
   </div></div>`).join('');
 
-  // ─── توزيع الأسهم ───
+  // ═══ توزيع الأسهم ═══
   const stEl = document.getElementById('r-stocks-alloc');
   if (stEl) stEl.innerHTML = Object.entries(h).length ? Object.entries(h).map(([s, v], i) => {
     const cp = getStockPrice(s) || v.avgPrice;
@@ -61,7 +62,7 @@ export function renderReports() {
     return `<div class="alloc-row"><div class="alloc-dot" style="background:${PALETTE[i % PALETTE.length]}"></div><div class="alloc-label">${escapeHtml(s)} — ${escapeHtml(v.name)}</div><div class="alloc-prog"><div class="prog-wrap"><div class="prog-bar" style="width:${Math.min(p, 100)}%;background:${PALETTE[i % PALETTE.length]}"></div></div></div><div class="alloc-pct">${p.toFixed(1)}%</div><div class="alloc-val ${pnl >= 0 ? 'pos' : 'neg'}">${pnl >= 0 ? '+' : ''}${fmtK(pnl)}</div></div>`;
   }).join('') : `<div style="color:var(--muted);font-size:12px;padding:12px">لا توجد أسهم في هذه الفترة</div>`;
 
-  // ─── توزيع المعادن ───
+  // ═══ توزيع المعادن ═══
   const mtEl = document.getElementById('r-metals-alloc');
   if (mtEl) mtEl.innerHTML = Object.entries(mh).length ? Object.entries(mh).map(([t, v], i) => {
     const bt = v.metal_type || t.split('|')[0];
@@ -72,7 +73,7 @@ export function renderReports() {
     return `<div class="alloc-row"><div class="alloc-dot" style="background:${['#d97706','#f59e0b','#b45309','#92400e'][i % 4]}"></div><div class="alloc-label">${escapeHtml(v.title ? bt + ' — ' + v.title : bt)}</div><div class="alloc-prog"><div class="prog-wrap"><div class="prog-bar" style="width:${Math.min(p, 100)}%;background:#d97706"></div></div></div><div class="alloc-pct">${p.toFixed(1)}%</div><div class="alloc-val ${pnl >= 0 ? 'pos' : 'neg'}">${pnl >= 0 ? '+' : ''}${fmtK(pnl)}</div></div>`;
   }).join('') : `<div style="color:var(--muted);font-size:12px;padding:12px">لا توجد معادن</div>`;
 
-  // ─── الديون ───
+  // ═══ الديون ═══
   const debtsEl = document.getElementById('r-debts-section');
   if (debtsEl) {
     if (DB.debts.length) {
@@ -101,7 +102,7 @@ export function renderReports() {
     } else debtsEl.innerHTML = '';
   }
 
-  // ─── القائمة المالية ───
+  // ═══ القوائم المالية ═══
   buildFinancialStatement(PT, periodLabel);
   buildIncomeStatement(PT, periodLabel);
   buildCashFlowStatement(PT, periodLabel);
@@ -109,6 +110,8 @@ export function renderReports() {
   if (typeof updateReportCurrencyCard === 'function') updateReportCurrencyCard();
   setTimeout(() => renderReportCharts(PT), 60);
 }
+
+// ══════════════════ القائمة المالية التفصيلية ══════════════════
 
 function buildFinancialStatement(PT, periodLabel) {
   const { h, mh, grand, totalBanks, stocksVal, stocksCost, metalsVal, metalsCost,
@@ -173,6 +176,8 @@ function buildFinancialStatement(PT, periodLabel) {
   document.getElementById('r-detail-tbody').innerHTML = fs;
 }
 
+// ══════════════════ قائمة الدخل ══════════════════
+
 function buildIncomeStatement(PT, periodLabel) {
   const { pnlStocks, pnlMetals, certsPaid, divTotal, realizedStockPnl } = PT;
   const realizedTotal = divTotal + certsPaid + realizedStockPnl;
@@ -193,6 +198,8 @@ function buildIncomeStatement(PT, periodLabel) {
   inc += `<tr class="fs-grand"><td>صافي الدخل الإجمالي — ${escapeHtml(periodLabel)}</td><td class="td-num ${cls(netIncome)}" style="direction:ltr;font-size:14px;font-weight:900">${sign(netIncome)}${fmt(Math.abs(netIncome))}</td></tr>`;
   document.getElementById('r-income-tbody').innerHTML = inc;
 }
+
+// ══════════════════ قائمة التدفقات النقدية ══════════════════
 
 function buildCashFlowStatement(PT, periodLabel) {
   const { cashIn, cashOut, totalBanks, periodStart: pS, periodEnd: pE } = PT;
@@ -221,6 +228,8 @@ function buildCashFlowStatement(PT, periodLabel) {
   cf += `<tr><td style="color:var(--muted);font-size:11px;padding-top:10px">رصيد البنوك الحالي (كل الحسابات)</td><td class="td-num" style="direction:ltr;color:var(--muted);font-size:11px">${fmt(totalBanks)}</td></tr>`;
   document.getElementById('r-cashflow-tbody').innerHTML = cf;
 }
+
+// ══════════════════ الرسوم البيانية ══════════════════
 
 export function renderReportCharts(PT) {
   const { h, mh, totalBanks, stocksVal, metalsVal, certsTotal,
@@ -289,6 +298,7 @@ export function renderReportCharts(PT) {
     }
   }
 
+  // ─── شهادات (باستخدام CHARTS الموحد) ───
   if (DB.certs.length) {
     const sorted = [...DB.certs].sort((a, b) => a.maturity_date > b.maturity_date ? 1 : -1);
     destroyChart('r-certs');
@@ -349,6 +359,8 @@ export function renderReportCharts(PT) {
   ]);
 }
 
+// ══════════════════ بطاقة عملة التقارير ══════════════════
+
 export function updateReportCurrencyCard() {
   const sel = document.getElementById('r-currency-sel');
   if (!sel) return;
@@ -394,9 +406,8 @@ export function updateReportCurrencyCard() {
   }).join('') + rateDisplay;
 }
 
-// ══════════════════════════════════════════════════════════════════
-//  exportPDF
-// ══════════════════════════════════════════════════════════════════
+// ══════════════════ exportPDF ══════════════════
+
 export async function exportPDF() {
   try {
     renderReports();
