@@ -68,4 +68,185 @@ export function renderCerts() {
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;font-size:11px;color:var(--muted);background:var(--surface2);border-radius:8px;padding:8px">
           <div>مستحق حتى اليوم<div style="color:var(--blue);font-weight:700">${fmt(accrued)}</div></div>
           <div>العائد الدوري<div style="color:var(--green);font-weight:700">${fmt(perPeriod)}</div></div>
-          <div>عائد مُصرف<div style
+          <div>عائد مُصرف<div style="color:var(--teal);font-weight:700">${fmt(c.interest_paid)}</div></div>
+          <div>إجمالي الفائدة<div style="color:var(--green);font-weight:700">+${fmt(c.total_interest)}</div></div>
+        </div>
+      </div>
+      <div class="info-card-footer">
+        <button class="btn btn-xs btn-success" onclick="openCertPayout(${c.id})">صرف عائد</button>
+        <button class="btn-icon edit" onclick="editCert(${c.id})"><svg viewBox="0 0 24 24"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg></button>
+        <button class="btn-icon danger" onclick="deleteCert(${c.id})"><svg viewBox="0 0 24 24"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6"/></svg></button>
+      </div>
+    </div>`;
+  }).join('') : `<div class="empty-state" style="padding:32px;text-align:center;color:var(--muted);grid-column:1/-1"><p>لا توجد شهادات</p></div>`;
+}
+
+export async function saveCert() {
+  const id = document.getElementById('ecert-id').value;
+  const name = document.getElementById('ecert-name').value.trim();
+  const bank_name = document.getElementById('ecert-bank-name').value.trim();
+  const amount = N2(document.getElementById('ecert-amount').value);
+  const currency = document.getElementById('ecert-currency')?.value || baseCur();
+  const rate = N2(document.getElementById('ecert-rate').value);
+  const duration = N2(document.getElementById('ecert-dur').value);
+  const issued = document.getElementById('ecert-date').value || today();
+  const payout_type = document.getElementById('ecert-payout').value;
+  const bankId = +document.getElementById('ecert-bank').value;
+  if (!name || !amount || !rate) return alert('أكمل البيانات');
+  const mat = new Date(issued); mat.setFullYear(mat.getFullYear() + duration);
+  const maturity_date = mat.toISOString().slice(0, 10);
+  const total_interest = +(amount * rate / 100 * duration).toFixed(4);
+  try {
+    if (id) {
+      const orig = DB.certs.find(c => c.id === +id);
+      await sbPatch('certificates', id, { name, bank_name, amount, currency, rate, duration, issued_date: issued, maturity_date, total_interest, payout_type });
+      if (orig?.bank_transaction_id && (N2(orig.amount) !== amount || orig.issued_date !== issued)) {
+        await sbPatch('bank_transactions', orig.bank_transaction_id, { amount, date: issued, notes: 'شراء شهادة: ' + name });
+      }
+      closeModal('modal-cert-add');
+      document.getElementById('ecert-id').value = '';
+      toast('تم التعديل');
+    } else {
+      if (!bankId) return alert('اختر الحساب البنكي');
+      const bank = DB.banks.find(b => b.id === bankId);
+      if (!bank) return alert('الحساب غير موجود');
+      const bankCur = bank.currency || 'EGP';
+      if (currency !== bankCur) return alert(`عملة الشراء (${currency}) لا تطابق عملة الحساب (${bankCur}).`);
+      if (N2(bank.balance) < amount) return alert('الرصيد غير كافٍ: ' + fmt(bank.balance) + ' ' + bankCur);
+      const bt = await sbPost('bank_transactions', [{ bank_id: bankId, type: 'سحب', amount, date: issued, notes: 'شراء شهادة: ' + name, category: 'شهادة ادخارية' }]);
+      await sbPost('certificates', [{ bank_id: bankId, name, bank_name, amount, currency, rate, duration, issued_date: issued, maturity_date, total_interest, payout_type, interest_paid: 0, bank_transaction_id: bt?.[0]?.id || null }]);
+      closeModal('modal-cert-add');
+      document.getElementById('ecert-id').value = '';
+      toast('تم إضافة الشهادة');
+    }
+    await reload();
+  } catch (e) { toast('خطأ: ' + e.message, false); }
+}
+
+export async function doCertBreak() {
+  const certId = +document.getElementById('ecb-cert').value;
+  const dt = document.getElementById('ecb-date').value || today();
+  const fee = N2(document.getElementById('ecb-fee').value);
+  const bankId = +document.getElementById('ecb-bank').value;
+  const notes = document.getElementById('ecb-notes')?.value || '';
+  const cert = DB.certs.find(c => c.id === certId);
+  if (!cert) return alert('اختر شهادة');
+  if (!bankId) return alert('اختر حساباً بنكياً');
+  const now = new Date(dt), issued = new Date(cert.issued_date), mat = new Date(cert.maturity_date);
+  const isEarly = now < mat;
+  const daysHeld = Math.max(0, Math.ceil((now - issued) / 86400000));
+  const totalDays = Math.max(1, Math.ceil((mat - issued) / 86400000));
+  const earnedInterest = isEarly ? +(N2(cert.total_interest) * daysHeld / totalDays).toFixed(4) : N2(cert.total_interest);
+  const remainingInterest = Math.max(0, earnedInterest - N2(cert.interest_paid));
+  const refund = Math.max(0, N2(cert.amount) + remainingInterest - fee);
+  if (!confirm(`كسر شهادة "${cert.name}"؟\nالمبلغ المسترد: ${fmt(refund)}`)) return;
+  try {
+    const notesFull = `كسر شهادة: ${cert.name} | أصل: ${fmt(cert.amount)} | فائدة: ${fmt(remainingInterest)} | رسوم: ${fmt(fee)}${notes ? ' | ' + notes : ''}${isEarly ? ' | كسر مبكر' : ''}`;
+    await sbPost('bank_transactions', [{ bank_id: bankId, type: 'إيداع', amount: refund, date: dt, notes: notesFull, category: 'كسر شهادة' }]);
+    if (cert.bank_transaction_id) { try { await sbDel('bank_transactions', cert.bank_transaction_id); } catch (e) {} }
+    await sbDel('certificates', certId);
+    closeModal('modal-cert-break');
+    toast('تم كسر الشهادة'); await reload();
+  } catch (e) { toast('خطأ: ' + e.message, false); }
+}
+
+export async function doCertPayout() {
+  const certId = +document.getElementById('ecp-cert-id').value;
+  const bankId = +document.getElementById('ecp-bank').value;
+  const mode = document.querySelector('input[name="ecp-mode"]:checked')?.value || 'single';
+  const cert = DB.certs.find(c => c.id === certId);
+  if (!cert) return alert('الشهادة غير موجودة');
+  if (!bankId) return alert('اختر حساباً بنكياً');
+  if (mode === 'schedule') {
+    const sched = getCertPayoutSchedule(cert);
+    if (!sched.unpaidPeriods.length) return alert('لا توجد دفعات مستحقة');
+    try {
+      let runningPaid = N2(cert.interest_paid);
+      for (const p of sched.unpaidPeriods) {
+        runningPaid = +(runningPaid + p.amount).toFixed(4);
+        await sbPost('bank_transactions', [{ bank_id: bankId, type: 'عائد شهادة', amount: p.amount, date: p.date, notes: 'عائد شهادة: ' + cert.name + ' | دفعة رقم ' + p.period, category: 'عائد شهادة' }]);
+      }
+      await sbPatch('certificates', certId, { interest_paid: runningPaid });
+      closeModal('modal-cert-payout');
+      toast(`تم تسجيل ${sched.unpaidPeriods.length} دفعة`);
+      await reload();
+    } catch (e) { toast('خطأ: ' + e.message, false); }
+    return;
+  }
+  const amount = N2(document.getElementById('ecp-amount').value);
+  const dt = document.getElementById('ecp-date').value || today();
+  if (!amount || amount <= 0) return alert('أدخل مبلغ العائد');
+  const remaining = Math.max(0, N2(cert.total_interest) - N2(cert.interest_paid));
+  if (amount > remaining + 0.01) return alert(`المبلغ أكبر من المتاح (${fmt(remaining)})`);
+  try {
+    await sbPost('bank_transactions', [{ bank_id: bankId, type: 'عائد شهادة', amount, date: dt, notes: 'عائد شهادة: ' + cert.name, category: 'عائد شهادة' }]);
+    await sbPatch('certificates', certId, { interest_paid: +(N2(cert.interest_paid) + amount).toFixed(4) });
+    closeModal('modal-cert-payout');
+    toast('تم صرف العائد'); await reload();
+  } catch (e) { toast('خطأ: ' + e.message, false); }
+}
+
+export async function doBulkCertPayout() {
+  const mode = document.querySelector('input[name="bcp-mode"]:checked')?.value || 'single';
+  const checked = [...document.querySelectorAll('.bcp-check:checked')].map(el => +el.dataset.cert);
+  if (!checked.length) return alert('اختر شهادة على الأقل');
+  let done = 0, skipped = [];
+  try {
+    if (mode === 'single') {
+      const dt = document.getElementById('bcp-date').value || today();
+      for (const certId of checked) {
+        const cert = DB.certs.find(c => c.id === certId); if (!cert) continue;
+        const amount = N2(document.querySelector(`.bcp-amount[data-cert="${certId}"]`)?.value);
+        if (!amount || amount <= 0) { skipped.push(cert.name); continue; }
+        if (!cert.bank_id) { skipped.push(cert.name + ' (بدون حساب)'); continue; }
+        await sbPost('bank_transactions', [{ bank_id: cert.bank_id, type: 'عائد شهادة', amount, date: dt, notes: 'عائد شهادة: ' + cert.name, category: 'عائد شهادة' }]);
+        await sbPatch('certificates', certId, { interest_paid: +(N2(cert.interest_paid) + amount).toFixed(4) });
+        done++;
+      }
+    } else {
+      for (const certId of checked) {
+        const cert = DB.certs.find(c => c.id === certId); if (!cert) continue;
+        const sched = getCertPayoutSchedule(cert);
+        if (!sched.unpaidPeriods.length) continue;
+        if (!cert.bank_id) { skipped.push(cert.name + ' (بدون حساب)'); continue; }
+        let runningPaid = N2(cert.interest_paid);
+        for (const p of sched.unpaidPeriods) {
+          runningPaid = +(runningPaid + p.amount).toFixed(4);
+          await sbPost('bank_transactions', [{ bank_id: cert.bank_id, type: 'عائد شهادة', amount: p.amount, date: p.date, notes: 'عائد شهادة: ' + cert.name + ' | دفعة ' + p.period, category: 'عائد شهادة' }]);
+        }
+        await sbPatch('certificates', certId, { interest_paid: runningPaid });
+        done++;
+      }
+    }
+    closeModal('modal-bulk-cert-payout');
+    toast(`تم لـ ${done} شهادة${skipped.length ? ' — تخطّي: ' + skipped.join(', ') : ''}`);
+    await reload();
+  } catch (e) { toast('خطأ: ' + e.message, false); }
+}
+
+export function editCert(id) {
+  const c = DB.certs.find(x => x.id === id);
+  if (!c) return;
+  document.getElementById('ecert-id').value = c.id;
+  document.getElementById('ecert-name').value = c.name;
+  document.getElementById('ecert-bank-name').value = c.bank_name || '';
+  document.getElementById('ecert-amount').value = c.amount;
+  document.getElementById('ecert-rate').value = c.rate;
+  document.getElementById('ecert-dur').value = c.duration;
+  document.getElementById('ecert-payout').value = c.payout_type || 'سنوي';
+  document.getElementById('ecert-date').value = c.issued_date;
+  document.getElementById('modal-cert-title').textContent = 'تعديل الشهادة';
+  const bankSel = document.getElementById('ecert-bank');
+  if (bankSel) bankSel.value = c.bank_id || '';
+  openModal('modal-cert-add');
+}
+
+export async function deleteCert(id) {
+  if (!confirm('حذف هذه الشهادة؟')) return;
+  try {
+    const cert = DB.certs.find(c => c.id === id);
+    if (cert?.bank_transaction_id) { try { await sbDel('bank_transactions', cert.bank_transaction_id); } catch (e) {} }
+    await sbDel('certificates', id);
+    toast('تم الحذف'); await reload();
+  } catch (e) { toast('خطأ: ' + e.message, false); }
+}
