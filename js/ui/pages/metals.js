@@ -1,7 +1,7 @@
 // ══════════════════════════════════════════════════════════════════
-//  pages/metals.js — المعادن الثمينة
+//  pages/metals.js — المعادن الثمينة + Undo
 // ══════════════════════════════════════════════════════════════════
-import { DB, UI, editCtx } from '../../state.js';
+import { DB, editCtx } from '../../state.js';
 import { N2, fmt, fmtN, pct, today, sign, cls, escapeHtml, baseCur } from '../../core/utils.js';
 import { sbPost, sbPatch, sbDel, sbUpsert } from '../../core/supabase.js';
 import { toast } from '../toast.js';
@@ -11,6 +11,8 @@ import { openModal, closeModal } from '../modals.js';
 import { calcTotals, getMetalHoldings, getMetalPrice } from '../../domain/calc.js';
 
 const reload = () => window.loadAll?.();
+
+// ══════════════════ Render ══════════════════
 
 export function renderMetals() {
   const mh = getMetalHoldings();
@@ -85,7 +87,7 @@ export function renderMetals() {
   document.getElementById('metal-txns-tbody').innerHTML = txns.length ? txns.map(t => {
     const bank = DB.banks.find(b => b.id === t.bank_id);
     const bc = bank ? (bank.color || '#3b82f6') : '#888';
-    return `<tr style="border-right:2px solid ${bc}22">
+    return `<tr data-row-id="${t.id}" style="border-right:2px solid ${bc}22">
       <td>${t.date}</td><td>${typeTag(t.op)}</td>
       <td><div style="font-weight:700;color:var(--gold)">${escapeHtml((t.metal_type || '').split('|')[0])}</div>${t.notes ? `<div style="font-size:10px;color:var(--muted)">${escapeHtml(t.notes)}</div>` : ''}</td>
       <td class="td-num">${fmtN(N2(t.weight), 3)} جم</td>
@@ -103,6 +105,8 @@ export function renderMetals() {
     </tr>`;
   }).join('') : `<tr><td colspan="12" style="text-align:center;padding:24px;color:var(--muted)">لا توجد عمليات</td></tr>`;
 }
+
+// ══════════════════ Actions ══════════════════
 
 export async function doMetalBuy() {
   const typeSel = document.getElementById('emb-metal-type')?.value;
@@ -133,7 +137,8 @@ export async function doMetalBuy() {
       await sbUpsert('metal_prices', { metal_type, price_per_gram });
     }
     closeModal('modal-metal-buy');
-    toast('تم الشراء'); await reload();
+    toast('تم الشراء');
+    await reload();
   } catch (e) { toast('خطأ: ' + e.message, false); }
 }
 
@@ -162,14 +167,17 @@ export async function doMetalSell() {
     const bt = await sbPost('bank_transactions', [{ bank_id: bankId, type: 'إيداع', amount: net, date: dt, notes: `بيع ${metal_type}\n${autoNote}`, category: 'بيع معادن' }]);
     await sbPost('metal_transactions', [{ bank_id: bankId, op: 'بيع', metal_type, weight, price_per_gram, total, manufacturing: 0, cashback, net, date: dt, notes: metal_title, bank_transaction_id: bt?.[0]?.id || null }]);
     closeModal('modal-metal-sell');
-    toast('تم البيع'); await reload();
+    toast('تم البيع');
+    await reload();
   } catch (e) { toast('خطأ: ' + e.message, false); }
 }
 
+// ✅ Undo: حذف عملية معدن
 export async function deleteMetalTxn(id) {
   const txn = DB.metalTxns.find(t => t.id === id);
   if (!txn) return;
-  await deleteWithUndo('metal_transactions', id, `${txn.metal_type} ${txn.op}`, async () => {
+  const label = `${txn.metal_type} ${txn.op}`;
+  await deleteWithUndo('metal_transactions', id, label, async () => {
     if (txn.bank_transaction_id) {
       try { await sbDel('bank_transactions', txn.bank_transaction_id); } catch (e) {}
     }
@@ -208,7 +216,6 @@ export function editMetalTxn(id) {
 export function addMoreMetal(metalType, metalTitle) {
   openModal('modal-metal-buy');
   setTimeout(() => {
-    // على افتراض أن populateMetalTypeSelect موجودة في settings.js
     if (typeof window.__populateMetalTypeSelect === 'function') window.__populateMetalTypeSelect(metalType);
     document.getElementById('emb-notes').value = metalTitle || '';
     document.getElementById('emb-weight').value = '';
