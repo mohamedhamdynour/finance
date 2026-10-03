@@ -19,6 +19,7 @@ import {
 } from './core/settings.js';
 import { showAllSkeletons, hideAllSkeletons } from './ui/skeleton.js';
 import { saveCache, loadCache, applyCacheToDB, clearCache, cacheInfo } from './core/cache.js';
+import { ensureChartLoaded } from './ui/charts.js';
 
 // ─── 2) UI Shared ──────────────────────────────────────────────
 import { toast, installToastGlobal } from './ui/toast.js';
@@ -366,7 +367,10 @@ async function onAuthSuccess() {
   populateAllCurrencySelects();
   updateCurrencyLabels();
   await loadAll();
-  // تحديث الأسعار في الخلفية
+  
+  // تحميل Chart.js بعد فتح التطبيق (في الخلفية)
+  ensureChartLoaded();
+  
   pricesPage.autoFetchExchangeRates(false);
   pricesPage.autoFetchMetalPrices(false);
 }
