@@ -16,6 +16,7 @@ import {
   addSettingsCurrency, renameSettingsCurrency, removeSettingsCurrency,
   saveGeneralSettings, saveGoldApiKey, populateMetalTypeSelect, onMetalTypeChange
 } from './core/settings.js';
+import { showAllSkeletons, hideAllSkeletons } from './ui/skeleton.js';
 
 // ─── 2) UI Shared ──────────────────────────────────────────────
 import { toast, installToastGlobal } from './ui/toast.js';
@@ -205,6 +206,7 @@ async function runIntegrityCheck() {
 // ══════════════════════════════════════════════════════════════════
 async function loadAll() {
   try {
+    showAllSkeletons();
     document.getElementById('sidebar-sync').innerHTML = '<span class="sync-dot"></span> جاري التحميل...';
     const [banks, bankTxns, stockTxns, stockPrices, metalTxns, metalPrices,
            certs, dividends, recurring, goals, exRates, snapshots, debts, debtPayments] =
@@ -259,6 +261,7 @@ async function loadAll() {
     const ps = document.getElementById('global-period-select');
     if (ps && UI.globalPeriod) ps.value = UI.globalPeriod;
     document.getElementById('sidebar-sync').innerHTML = '<span class="sync-dot"></span> آخر تحديث: ' + new Date().toLocaleTimeString('ar-EG');
+    hideAllSkeletons();
   } catch (e) {
     console.error('loadAll error:', e);
     const msg = e.message || 'خطأ غير معروف';
