@@ -25,6 +25,7 @@ import { isOnline } from './core/network.js';
 import * as installmentsPage from './ui/pages/installments.js';
 import * as rebalancingPage from './ui/pages/rebalancing.js';
 import * as riskPage from './ui/pages/risk.js';
+import * as forecastPage from './ui/pages/forecast.js';
 
 // ─── 2) UI Shared ──────────────────────────────────────────────
 import { toast, installToastGlobal } from './ui/toast.js';
@@ -124,6 +125,7 @@ const PAGE_TITLES = {
   installments: ['الأقساط والالتزامات المقسّمة', 'تتبع أقساطك ودفعاتك'],
   rebalancing: ['إعادة توازن المحفظة', 'قارن توزيعك الحالي بالمستهدف'],
   risk: ['تحليل المخاطر', 'قياس كمي لمخاطر محفظتك'],
+  forecast: ['التوقعات المالية', 'تنبؤ بمستقبل محفظتك'],
 
 };
 
@@ -157,6 +159,7 @@ function renderPage() {
     else if (p === 'reports') reportsPage.renderReports();
     else if (p === 'risk') riskPage.renderRisk();
     else if (p === 'zakat') zakatPage.renderZakat();
+    else if (p === 'forecast') forecastPage.renderForecast();
     else if (p === 'settings') renderSettings();
   } catch (e) {
     console.error('renderPage error on page [' + p + ']:', e);
@@ -571,11 +574,13 @@ Object.assign(window, {
   autoCalcInstallmentAmount: installmentsPage.autoCalcInstallmentAmount
 });
   // Settings helpers (تُستدعى من innerHTML بـ window.__)
+  saveForecastSettings: forecastPage.saveForecastSettings,
   window.__renameSettingsCurrency = renameSettingsCurrency;
   window.__removeSettingsCurrency = removeSettingsCurrency;
   window.__populateMetalTypeSelect = populateMetalTypeSelect;
   window.openGlobalSearch = openGlobalSearch;
   window.closeGlobalSearch = closeGlobalSearch;
+  
 }
 
 // ══════════════════════════════════════════════════════════════════
