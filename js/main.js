@@ -30,6 +30,7 @@ import { installAttachmentHandlers } from './ui/attachments.js';
 import { attachmentsCount } from './domain/attachments.js';
 import { exportExcel } from './core/excel.js';
 import { autoApplyRecurring, notifyAutoRecurringResult } from './domain/auto-recurring.js';
+import * as comparisonsPage from './ui/pages/comparisons.js';
 
 // ─── 2) UI Shared ──────────────────────────────────────────────
 import { toast, installToastGlobal } from './ui/toast.js';
@@ -130,6 +131,7 @@ const PAGE_TITLES = {
   rebalancing: ['إعادة توازن المحفظة', 'قارن توزيعك الحالي بالمستهدف'],
   risk: ['تحليل المخاطر', 'قياس كمي لمخاطر محفظتك'],
   forecast: ['التوقعات المالية', 'تنبؤ بمستقبل محفظتك'],
+  comparisons: ['المقارنات الزمنية', 'تحليل MoM / QoQ / YoY'],
 
 };
 
@@ -165,6 +167,7 @@ function renderPage() {
     else if (p === 'zakat') zakatPage.renderZakat();
     else if (p === 'forecast') forecastPage.renderForecast();
     else if (p === 'settings') renderSettings();
+    else if (p === 'comparisons') comparisonsPage.renderComparisons();
   } catch (e) {
     console.error('renderPage error on page [' + p + ']:', e);
     toast('خطأ في عرض الصفحة: ' + e.message, false);
@@ -601,6 +604,7 @@ Object.assign(window, {
   // Settings helpers (تُستدعى من innerHTML بـ window.__)
   window.__DB__ = DB;   // لفتح المرفقات
   saveForecastSettings: forecastPage.saveForecastSettings,
+  window.__setCmpTab = comparisonsPage.setCmpTab;
   window.exportExcel = exportExcel;
   window.__renameSettingsCurrency = renameSettingsCurrency;
   window.__removeSettingsCurrency = removeSettingsCurrency;
