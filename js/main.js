@@ -18,6 +18,7 @@ import {
   saveGeneralSettings, saveGoldApiKey, populateMetalTypeSelect, onMetalTypeChange
 } from './core/settings.js';
 import { showAllSkeletons, hideAllSkeletons } from './ui/skeleton.js';
+import { saveCache, loadCache, applyCacheToDB, clearCache, cacheInfo } from './core/cache.js';
 
 // ─── 2) UI Shared ──────────────────────────────────────────────
 import { toast, installToastGlobal } from './ui/toast.js';
@@ -205,10 +206,39 @@ async function runIntegrityCheck() {
 // ══════════════════════════════════════════════════════════════════
 //  loadAll — نقطة التحميل المركزية
 // ══════════════════════════════════════════════════════════════════
-async function loadAll() {
-  try {
+async function loadAll(opts = {}) {
+  const silent = opts.silent === true; // بدون skeletons (عند التحديث السريع)
+  const useCache = opts.useCache !== false; // استخدم الكاش افتراضياً
+
+  // ─── 1) عرض البيانات من الكاش فوراً (إن وُجد) ───
+  if (useCache) {
+    const cache = await loadCache();
+    if (cache) {
+      applyCacheToDB(cache.data);
+      // عرض فوري بدون انتظار الشبكة
+      try {
+        renderPage();
+        updateNotificationBell();
+        const t = calcTotals();
+        const sidebarTotal = document.getElementById('sidebar-total');
+        if (sidebarTotal) sidebarTotal.textContent = fmt(t.grand);
+        const syncEl = document.getElementById('sidebar-sync');
+        if (syncEl) syncEl.innerHTML = '<span class="sync-dot"></span> تحديث...';
+      } catch (e) {
+        console.warn('[loadAll] cache render failed:', e.message);
+      }
+    } else if (!silent) {
+      showAllSkeletons();
+    }
+  } else if (!silent) {
     showAllSkeletons();
-    document.getElementById('sidebar-sync').innerHTML = '<span class="sync-dot"></span> جاري التحميل...';
+  }
+
+  // ─── 2) تحميل من الشبكة (في الخلفية أو للأمام) ───
+  try {
+    const syncEl = document.getElementById('sidebar-sync');
+    if (syncEl && !useCache) syncEl.innerHTML = '<span class="sync-dot"></span> جاري التحميل...';
+
     const [banks, bankTxns, stockTxns, stockPrices, metalTxns, metalPrices,
            certs, dividends, recurring, goals, exRates, snapshots, debts, debtPayments] =
       await Promise.all([
@@ -248,33 +278,44 @@ async function loadAll() {
     DB.bankTxns = DB.bankTxns.filter(t => validBankIds.has(t.bank_id));
 
     if (!UI.activeBankId && banks.length) UI.activeBankId = banks[0].id;
-    else if (UI.activeBankId && UI.activeBankId !== 'ALL' && !validBankIds.has(+UI.activeBankId) && banks.length) UI.activeBankId = banks[0].id;
+    else if (UI.activeBankId && UI.activeBankId !== 'ALL' && !validBankIds.has(+UI.activeBankId) && banks.length)
+      UI.activeBankId = banks[0].id;
+
+    // ─── 3) حفظ في الكاش ───
+    saveCache(); // بدون await (لا نبطئ الواجهة)
 
     await saveSnapshot();
     updateBadges();
     renderPage();
     updateNotificationBell();
+    hideAllSkeletons();
 
     const t = calcTotals();
-    document.getElementById('sidebar-total').textContent = fmt(t.grand);
+    const sidebarTotal = document.getElementById('sidebar-total');
+    if (sidebarTotal) sidebarTotal.textContent = fmt(t.grand);
+
     setTimeout(runIntegrityCheck, 3000);
 
     const ps = document.getElementById('global-period-select');
     if (ps && UI.globalPeriod) ps.value = UI.globalPeriod;
-    document.getElementById('sidebar-sync').innerHTML = '<span class="sync-dot"></span> آخر تحديث: ' + new Date().toLocaleTimeString('ar-EG');
-    hideAllSkeletons();
+    if (syncEl) syncEl.innerHTML = '<span class="sync-dot"></span> آخر تحديث: ' + new Date().toLocaleTimeString('ar-EG');
+
   } catch (e) {
     console.error('loadAll error:', e);
+    hideAllSkeletons();
     const msg = e.message || 'خطأ غير معروف';
     toast('خطأ في الاتصال: ' + msg, false);
+
     const syncEl = document.getElementById('sidebar-sync');
     if (syncEl) syncEl.innerHTML = '<span class="sync-dot err"></span> ' + msg.slice(0, 40);
+
     const content = document.getElementById('main-content');
     if (content && !document.getElementById('global-error-banner')) {
       const errDiv = document.createElement('div');
       errDiv.id = 'global-error-banner';
       errDiv.style = 'background:var(--red-l);border:.5px solid var(--red);border-radius:var(--radius);padding:14px 18px;margin-bottom:16px;color:var(--red-d);font-size:13px;font-weight:700;display:flex;justify-content:space-between;align-items:center';
-      errDiv.innerHTML = `<span>فشل الاتصال بقاعدة البيانات: ${escapeHtml(msg)}</span><button onclick="window.loadAll()" style="background:var(--red);color:#fff;border:none;padding:6px 14px;border-radius:6px;cursor:pointer;font-size:12px;font-family:inherit;font-weight:700">إعادة المحاولة</button>`;
+      errDiv.innerHTML = `<span>فشل الاتصال بقاعدة البيانات: ${escapeHtml(msg)}</span>
+        <button onclick="window.loadAll({useCache:false})" style="background:var(--red);color:#fff;border:none;padding:6px 14px;border-radius:6px;cursor:pointer;font-size:12px;font-family:inherit;font-weight:700">إعادة المحاولة</button>`;
       content.insertBefore(errDiv, content.firstChild);
     }
   }
@@ -467,6 +508,12 @@ function exposeGlobals() {
     exportBackup,
     importBackup,
     saveEdit
+  });
+
+  Object.assign(window, {
+  clearCache,
+  cacheInfo,
+  saveCache
   });
 
   // Settings helpers (تُستدعى من innerHTML بـ window.__)
