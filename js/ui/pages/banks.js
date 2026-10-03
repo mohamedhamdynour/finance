@@ -5,6 +5,7 @@ import { DB, UI, editCtx } from '../../state.js';
 import { N2, fmt, fmtN, pct, today, getBankColor, toEGP, escapeHtml, sign, cls, periodStart } from '../../core/utils.js';
 import { sbPost, sbPatch, sbDel, sbRpc } from '../../core/supabase.js';
 import { toast } from '../toast.js';
+import { deleteWithUndo } from '../undo.js';
 import { kpi, svgIcon, typeTag, populateSelect, fmtBankAmt } from '../shared.js';
 import { openModal, closeModal, quickDep, quickWit } from '../modals.js';
 import { calcTotals } from '../../domain/calc.js';
@@ -255,16 +256,16 @@ export async function toggleBankStatus(id) {
 
 export async function deleteBank(id) {
   const b = DB.banks.find(x => x.id === id);
-  if (!confirm(`حذف حساب "${b?.name}" نهائياً؟ سيتم أرشفة الحساب وكل حركاته.`)) return;
-  try {
-    await sbRpc('delete_bank_cascade', { p_bank_id: id });
-    toast('تم الحذف'); await reload();
-  } catch (e) {
+  if (!b) return;
+  await deleteWithUndo('banks', id, b.name, async () => {
+    // قبل الحذف الفعلي: أرشِف الحركات (soft delete)
     try {
-      await sbPatch('banks', id, { deleted_at: new Date().toISOString() });
-      toast('تم الحذف'); await reload();
-    } catch (e2) { toast('خطأ: ' + e2.message, false); }
-  }
+      const txns = DB.bankTxns.filter(t => t.bank_id === id);
+      for (const t of txns) {
+        await sbPatch('bank_transactions', t.id, { deleted_at: new Date().toISOString() });
+      }
+    } catch (e) { /* نتجاهل */ }
+  });
 }
 
 export async function doDeposit() {
@@ -355,14 +356,13 @@ export async function doTransfer() {
 
 export async function deleteBankTxn(id) {
   const txn = DB.bankTxns.find(t => t.id === id);
-  if (!txn || !confirm('حذف هذه الحركة؟')) return;
-  try {
+  if (!txn) return;
+  await deleteWithUndo('bank_transactions', id, 'حركة بنكية', async () => {
+    // احذف الحركة المرتبطة إن وُجدت (نفس التحويل)
     if (txn.linked_transfer_id) {
       try { await sbDel('bank_transactions', txn.linked_transfer_id); } catch (e) {}
     }
-    await sbDel('bank_transactions', id);
-    toast('تم الحذف'); await reload();
-  } catch (e) { toast('خطأ: ' + e.message, false); }
+  });
 }
 
 export function editBankTxn(id) {
