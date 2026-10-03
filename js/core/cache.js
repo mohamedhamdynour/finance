@@ -37,26 +37,27 @@ export async function saveCache() {
 
     // احتفظ بعدد محدود لتجنب تجاوز الحجم
     const snap = {
-      data: {
-        banks: DB.banks,
-        bankTxns: DB.bankTxns.slice(0, MAX_TXNS_IN_CACHE),
-        stockTxns: DB.stockTxns,
-        stockPrices: DB.stockPrices,
-        metalTxns: DB.metalTxns,
-        metalPrices: DB.metalPrices,
-        certs: DB.certs,
-        dividends: DB.dividends,
-        recurring: DB.recurring,
-        goals: DB.goals,
-        exchangeRates: DB.exchangeRates,
-        snapshots: DB.snapshots.slice(-MAX_SNAPSHOTS_IN_CACHE),
-        debts: DB.debts,
-        debtPayments: DB.debtPayments
-      },
-      ts: Date.now(),
-      version: 1
-    };
-
+  data: {
+    banks: DB.banks,
+    bankTxns: DB.bankTxns.slice(0, MAX_TXNS_IN_CACHE),
+    stockTxns: DB.stockTxns,
+    stockPrices: DB.stockPrices,
+    metalTxns: DB.metalTxns,
+    metalPrices: DB.metalPrices,
+    certs: DB.certs,
+    dividends: DB.dividends,
+    recurring: DB.recurring,
+    goals: DB.goals,
+    exchangeRates: DB.exchangeRates,
+    snapshots: DB.snapshots.slice(-MAX_SNAPSHOTS_IN_CACHE),
+    debts: DB.debts,
+    debtPayments: DB.debtPayments,
+    installments: DB.installments,             // ← جديد
+    installmentPayments: DB.installmentPayments // ← جديد
+  },
+  ts: Date.now(),
+  version: 1
+};
     await new Promise((res, rej) => {
       const tx = db.transaction(STORE_NAME, 'readwrite');
       const store = tx.objectStore(STORE_NAME);
