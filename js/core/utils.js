@@ -121,10 +121,7 @@ export const escapeHtml = (s) => String(s ?? '').replace(/[&<>"']/g, c => ({
 // تأخير تنفيذ الدالة (للبحث الحيّ مثلاً)
 export const debounce = (fn, ms = 250) => {
   let t;
-  return (...args) => {
-    clearTimeout(t);
-    t = setTimeout(() => fn(...args), ms);
-  };
+  return (...args) => { clearTimeout(t); t = setTimeout(() => fn(...args), ms); };
 };
 
 // تنقية مُعرّف HTML (يُستخدم في id حقول أسعار المعادن)
