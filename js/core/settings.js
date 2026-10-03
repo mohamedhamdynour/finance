@@ -1,6 +1,7 @@
 // ══════════════════════════════════════════════════════════════════
 //  settings.js — إعدادات التطبيق + العملات + الحفظ
 // ══════════════════════════════════════════════════════════════════
+import { baseCur, currencyCodes, N2, escapeHtml } from './utils.js';
 import { conn, APP_SETTINGS } from '../state.js';
 import { sbGet, sbPost, sbPatchBy } from './supabase.js';
 import { baseCur, currencyCodes, N2, escapeHtml } from './utils.js';
