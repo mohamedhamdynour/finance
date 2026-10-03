@@ -29,6 +29,7 @@ import * as forecastPage from './ui/pages/forecast.js';
 import { installAttachmentHandlers } from './ui/attachments.js';
 import { attachmentsCount } from './domain/attachments.js';
 import { exportExcel } from './core/excel.js';
+import { autoApplyRecurring, notifyAutoRecurringResult } from './domain/auto-recurring.js';
 
 // ─── 2) UI Shared ──────────────────────────────────────────────
 import { toast, installToastGlobal } from './ui/toast.js';
@@ -395,10 +396,19 @@ async function onAuthSuccess() {
   populateAllCurrencySelects();
   updateCurrencyLabels();
   await loadAll();
-  
-  // تحميل Chart.js بعد فتح التطبيق (في الخلفية)
-  ensureChartLoaded();
-  
+
+  // ─── تطبيق العمليات المتكررة المستحقة تلقائياً ───
+  // (يتم مرة واحدة يومياً — يُخزَّن في localStorage)
+  setTimeout(async () => {
+    try {
+      const result = await autoApplyRecurring(false);
+      notifyAutoRecurringResult(result);
+    } catch (e) {
+      console.warn('[auto-recurring] error:', e.message);
+    }
+  }, 1500); // بعد تحميل البيانات
+
+  // تحديث الأسعار في الخلفية
   pricesPage.autoFetchExchangeRates(false);
   pricesPage.autoFetchMetalPrices(false);
 }
@@ -407,6 +417,27 @@ async function onAuthSuccess() {
 //  تعريض كل الدوال على window (لتعمل مع onclick في HTML)
 // ══════════════════════════════════════════════════════════════════
 function exposeGlobals() {
+
+  applyAllRecurringNow: async () => {
+  const result = await autoApplyRecurring(true); // force = true
+  notifyAutoRecurringResult(result);
+  return result;
+},
+
+      // Recurring
+  Object.assign(window, {
+    saveRecurring: recurringPage.saveRecurring,
+    editRecurring: recurringPage.editRecurring,
+    deleteRecurring: recurringPage.deleteRecurring,
+    applyRecurring: recurringPage.applyRecurring,
+    applyAllRecurring: recurringPage.applyAllRecurring,
+    setRecurringFilter: recurringPage.setRecurringFilter,
+    applyAllRecurringNow: async () => {                       // ← جديد
+      const result = await autoApplyRecurring(true);
+      notifyAutoRecurringResult(result);
+      return result;
+    }
+  });
   // Core
   Object.assign(window, {
     loadAll, renderPage, nav, toggleSidebar, toast,
