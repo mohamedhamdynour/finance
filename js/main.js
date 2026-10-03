@@ -24,6 +24,7 @@ import { installNetworkIndicator, setupNetworkToasts } from './ui/network-indica
 import { isOnline } from './core/network.js';
 import * as installmentsPage from './ui/pages/installments.js';
 import * as rebalancingPage from './ui/pages/rebalancing.js';
+import * as riskPage from './ui/pages/risk.js';
 
 // ─── 2) UI Shared ──────────────────────────────────────────────
 import { toast, installToastGlobal } from './ui/toast.js';
@@ -122,6 +123,7 @@ const PAGE_TITLES = {
   settings: ['الإعدادات', 'ضبط متغيرات المحفظة'],
   installments: ['الأقساط والالتزامات المقسّمة', 'تتبع أقساطك ودفعاتك'],
   rebalancing: ['إعادة توازن المحفظة', 'قارن توزيعك الحالي بالمستهدف'],
+  risk: ['تحليل المخاطر', 'قياس كمي لمخاطر محفظتك'],
 
 };
 
@@ -153,6 +155,7 @@ function renderPage() {
     else if (p === 'goals') goalsPage.renderGoals();
     else if (p === 'prices') pricesPage.renderPrices();
     else if (p === 'reports') reportsPage.renderReports();
+    else if (p === 'risk') riskPage.renderRisk();
     else if (p === 'zakat') zakatPage.renderZakat();
     else if (p === 'settings') renderSettings();
   } catch (e) {
