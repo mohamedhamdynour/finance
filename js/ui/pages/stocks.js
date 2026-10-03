@@ -5,6 +5,7 @@ import { DB, UI, marketCtx } from '../../state.js';
 import { N2, fmt, fmtN, pct, today, sign, cls, escapeHtml, MARKET_COLORS, MARKET_NAMES } from '../../core/utils.js';
 import { sbPost, sbPatch, sbDel, sbUpsert } from '../../core/supabase.js';
 import { toast } from '../toast.js';
+import { deleteWithUndo } from '../undo.js';
 import { kpi, svgIcon, typeTag, populateSelect, renderInsightsCard } from '../shared.js';
 import { openModal, closeModal, populateSellSyms } from '../modals.js';
 import { calcTotals, getHoldings, getStockPrice } from '../../domain/calc.js';
@@ -242,12 +243,12 @@ export async function doSell() {
 
 export async function deleteStockTxn(id) {
   const txn = DB.stockTxns.find(t => t.id === id);
-  if (!txn || !confirm('حذف هذه العملية وعكس أثرها البنكي؟')) return;
-  try {
-    if (txn.bank_transaction_id) { try { await sbDel('bank_transactions', txn.bank_transaction_id); } catch (e) {} }
-    await sbDel('stock_transactions', id);
-    toast('تم الحذف'); await reload();
-  } catch (e) { toast('خطأ: ' + e.message, false); }
+  if (!txn) return;
+  await deleteWithUndo('stock_transactions', id, `${txn.symbol} ${txn.type}`, async () => {
+    if (txn.bank_transaction_id) {
+      try { await sbDel('bank_transactions', txn.bank_transaction_id); } catch (e) {}
+    }
+  });
 }
 
 export function editStockTxn(id) {
@@ -379,13 +380,13 @@ export function editDividend(id) {
 }
 
 export async function deleteDividend(id) {
-  if (!confirm('حذف هذا التوزيع؟')) return;
-  try {
-    const div = DB.dividends.find(d => d.id === id);
-    if (div?.bank_transaction_id) { try { await sbDel('bank_transactions', div.bank_transaction_id); } catch (e) {} }
-    await sbDel('dividends', id);
-    toast('تم الحذف'); await reload();
-  } catch (e) { toast('خطأ: ' + e.message, false); }
+  const div = DB.dividends.find(d => d.id === id);
+  if (!div) return;
+  await deleteWithUndo('dividends', id, `توزيع ${div.symbol}`, async () => {
+    if (div.bank_transaction_id) {
+      try { await sbDel('bank_transactions', div.bank_transaction_id); } catch (e) {}
+    }
+  });
 }
 
 import { editCtx } from '../../state.js';
