@@ -63,6 +63,12 @@ export const APP_SETTINGS = {
     targets: { banks: 25, stocks: 45, metals: 20, certs: 10 },
     threshold: 5
   },
+    forecast: {
+    horizon: 12,
+    expectedReturn: 15,
+    monthsBack: 6,
+    monthlyContribution: null
+  },
 };
 
 // ─── حالة الاتصال والمصادقة ────────────────────────────────────
