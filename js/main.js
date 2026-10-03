@@ -225,29 +225,14 @@ async function runIntegrityCheck() {
 //  loadAll — نقطة التحميل المركزية
 // ══════════════════════════════════════════════════════════════════
 async function loadAll(opts = {}) {
-  if (!isOnline()) {
-  console.log('[loadAll] الجهاز غير متصل — تم استخدام الكاش');
-  const cache = await loadCache();
-  if (cache) {
-    applyCacheToDB(cache.data);
-    renderPage();
-    updateNotificationBell();
-    const syncEl = document.getElementById('sidebar-sync');
-    if (syncEl) syncEl.innerHTML = '<span class="sync-dot err"></span> غير متصل — عرض من الكاش';
-  }
-  hideAllSkeletons();
-  return;
-}
-  
-  const silent = opts.silent === true; // بدون skeletons (عند التحديث السريع)
-  const useCache = opts.useCache !== false; // استخدم الكاش افتراضياً
+  const silent = opts.silent === true;
+  const useCache = opts.useCache !== false;
 
   // ─── 1) عرض البيانات من الكاش فوراً (إن وُجد) ───
   if (useCache) {
     const cache = await loadCache();
     if (cache) {
       applyCacheToDB(cache.data);
-      // عرض فوري بدون انتظار الشبكة
       try {
         renderPage();
         updateNotificationBell();
@@ -266,34 +251,33 @@ async function loadAll(opts = {}) {
     showAllSkeletons();
   }
 
-  // ─── 2) تحميل من الشبكة (في الخلفية أو للأمام) ───
+  // ─── 2) تحميل من الشبكة ───
   try {
     const syncEl = document.getElementById('sidebar-sync');
     if (syncEl && !useCache) syncEl.innerHTML = '<span class="sync-dot"></span> جاري التحميل...';
 
     const [banks, bankTxns, stockTxns, stockPrices, metalTxns, metalPrices,
-       certs, dividends, recurring, goals, exRates, snapshots, debts, debtPayments,
-       installments, installmentPayments, attachments] =
-  await Promise.all([
-    sbGet('banks', '?order=id&deleted_at=is.null'),
-    sbGet('bank_transactions', '?order=date.desc,id.desc&deleted_at=is.null'),
-    sbGet('stock_transactions', '?order=date.asc,id.asc&deleted_at=is.null'),
-    sbGet('stock_prices', '?order=symbol'),
-    sbGet('metal_transactions', '?order=date.asc,id.asc&deleted_at=is.null'),
-    sbGet('metal_prices', '?order=metal_type'),
-    sbGet('certificates', '?order=issued_date.asc&deleted_at=is.null'),
-    sbGet('dividends', '?order=date.desc&deleted_at=is.null'),
-    sbGet('recurring_transactions', '?order=id&deleted_at=is.null'),
-    sbGet('financial_goals', '?order=id&deleted_at=is.null'),
-    sbGet('exchange_rates', '?order=currency'),
-    sbGet('portfolio_snapshots', '?order=snapshot_date.asc&limit=500'),
-    sbGet('debts', '?order=id&deleted_at=is.null'),
-    sbGet('debt_payments', '?order=date.desc&deleted_at=is.null'),
-    sbGet('installments', '?order=id&deleted_at=is.null'),
-    sbGet('installment_payments', '?order=date.desc&deleted_at=is.null'),
-    sbGet('attachments', '?order=created_at.desc&deleted_at=is.null'),
-    
-  ]);
+           certs, dividends, recurring, goals, exRates, snapshots, debts, debtPayments,
+           installments, installmentPayments, attachments] =
+      await Promise.all([
+        sbGet('banks', '?order=id&deleted_at=is.null'),
+        sbGet('bank_transactions', '?order=date.desc,id.desc&deleted_at=is.null'),
+        sbGet('stock_transactions', '?order=date.asc,id.asc&deleted_at=is.null'),
+        sbGet('stock_prices', '?order=symbol'),
+        sbGet('metal_transactions', '?order=date.asc,id.asc&deleted_at=is.null'),
+        sbGet('metal_prices', '?order=metal_type'),
+        sbGet('certificates', '?order=issued_date.asc&deleted_at=is.null'),
+        sbGet('dividends', '?order=date.desc&deleted_at=is.null'),
+        sbGet('recurring_transactions', '?order=id&deleted_at=is.null'),
+        sbGet('financial_goals', '?order=id&deleted_at=is.null'),
+        sbGet('exchange_rates', '?order=currency'),
+        sbGet('portfolio_snapshots', '?order=snapshot_date.asc&limit=500'),
+        sbGet('debts', '?order=id&deleted_at=is.null'),
+        sbGet('debt_payments', '?order=date.desc&deleted_at=is.null'),
+        sbGet('installments', '?order=id&deleted_at=is.null'),
+        sbGet('installment_payments', '?order=date.desc&deleted_at=is.null'),
+        sbGet('attachments', '?order=created_at.desc&deleted_at=is.null')
+      ]);
 
     DB.banks = banks;
     DB.bankTxns = bankTxns;
@@ -312,6 +296,7 @@ async function loadAll(opts = {}) {
     DB.installments = installments;
     DB.installmentPayments = installmentPayments;
     DB.attachments = attachments;
+
     // استبعد الحركات المرتبطة ببنوك محذوفة
     const validBankIds = new Set(banks.map(b => b.id));
     DB.bankTxns = DB.bankTxns.filter(t => validBankIds.has(t.bank_id));
@@ -320,8 +305,7 @@ async function loadAll(opts = {}) {
     else if (UI.activeBankId && UI.activeBankId !== 'ALL' && !validBankIds.has(+UI.activeBankId) && banks.length)
       UI.activeBankId = banks[0].id;
 
-    // ─── 3) حفظ في الكاش ───
-    saveCache(); // بدون await (لا نبطئ الواجهة)
+    saveCache();
 
     await saveSnapshot();
     updateBadges();
@@ -343,10 +327,11 @@ async function loadAll(opts = {}) {
     console.error('loadAll error:', e);
     hideAllSkeletons();
     const msg = e.message || 'خطأ غير معروف';
+
     if (!isOnline()) {
-    toast('لا يوجد اتصال — التطبيق يعمل من الكاش', false);
+      toast('لا يوجد اتصال — التطبيق يعمل من الكاش', false);
     } else {
-    toast('خطأ في الاتصال: ' + msg, false);
+      toast('خطأ في الاتصال: ' + msg, false);
     }
 
     const syncEl = document.getElementById('sidebar-sync');
