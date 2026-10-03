@@ -31,6 +31,7 @@ import { attachmentsCount } from './domain/attachments.js';
 import { exportExcel } from './core/excel.js';
 import { autoApplyRecurring, notifyAutoRecurringResult } from './domain/auto-recurring.js';
 import * as comparisonsPage from './ui/pages/comparisons.js';
+import { installDetectorHandlers } from './ui/recurring-detector.js';
 
 // ─── 2) UI Shared ──────────────────────────────────────────────
 import { toast, installToastGlobal } from './ui/toast.js';
@@ -632,5 +633,6 @@ if ('serviceWorker' in navigator && !navigator.serviceWorker.controller) {
 installNetworkIndicator();
 setupNetworkToasts();
 installAttachmentHandlers();
+installDetectorHandlers();
 
 console.log('[main] Portfolio Pro bootstrapped');
