@@ -56,6 +56,8 @@ const tc = () => isDark() ? '#4a6080' : '#7a8ba8';   // tick color
 function chartAvailable() {
   if (typeof window === 'undefined' || !window.Chart) {
     console.warn('[charts] Chart.js غير محمّلة — سيتم تجاهل الرسم');
+    // اطلب التحميل تلقائيًا للاستخدام التالي
+    ensureChartLoaded();
     return false;
   }
   return true;
