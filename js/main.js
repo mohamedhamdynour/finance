@@ -10,6 +10,7 @@ import {
   initAuthGate, connectSupabase, disconnectSupabase, doLogin, doSignup, doLogout,
   setAuthTab, setAuthSuccessHandler, isAuthenticated, getCurrentUser
 } from './core/auth.js';
+import { openGlobalSearch, closeGlobalSearch } from './ui/search.js';
 import {
   loadAppSettings, persistAppSettings, populateAllCurrencySelects,
   updateCurrencyLabels, renderSettings, renderSchemaAlert,
@@ -472,6 +473,8 @@ function exposeGlobals() {
   window.__renameSettingsCurrency = renameSettingsCurrency;
   window.__removeSettingsCurrency = removeSettingsCurrency;
   window.__populateMetalTypeSelect = populateMetalTypeSelect;
+  window.openGlobalSearch = openGlobalSearch;
+  window.closeGlobalSearch = closeGlobalSearch;
 }
 
 // ══════════════════════════════════════════════════════════════════
