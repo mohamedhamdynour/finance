@@ -23,6 +23,7 @@ import { ensureChartLoaded } from './ui/charts.js';
 import { installNetworkIndicator, setupNetworkToasts } from './ui/network-indicator.js';
 import { isOnline } from './core/network.js';
 import * as installmentsPage from './ui/pages/installments.js';
+import * as rebalancingPage from './ui/pages/rebalancing.js';
 
 // ─── 2) UI Shared ──────────────────────────────────────────────
 import { toast, installToastGlobal } from './ui/toast.js';
@@ -120,6 +121,7 @@ const PAGE_TITLES = {
   zakat: ['الزكاة', 'حساب الزكاة الشرعية'],
   settings: ['الإعدادات', 'ضبط متغيرات المحفظة'],
   installments: ['الأقساط والالتزامات المقسّمة', 'تتبع أقساطك ودفعاتك'],
+  rebalancing: ['إعادة توازن المحفظة', 'قارن توزيعك الحالي بالمستهدف'],
 
 };
 
@@ -146,6 +148,7 @@ function renderPage() {
     else if (p === 'certs') certsPage.renderCerts();
     else if (p === 'debts') debtsPage.renderDebts();
     else if (p === 'installments') installmentsPage.renderInstallments();
+    else if (p === 'rebalancing') rebalancingPage.renderRebalancing();
     else if (p === 'recurring') recurringPage.renderRecurring();
     else if (p === 'goals') goalsPage.renderGoals();
     else if (p === 'prices') pricesPage.renderPrices();
@@ -440,6 +443,11 @@ function exposeGlobals() {
     onMetalTypeChange
   });
 
+  Object.assign(window, {
+  saveRebalanceTargets: rebalancingPage.saveRebalanceTargets,
+  updateRebalanceSum: rebalancingPage.updateRebalanceSum,
+  renderRebalanceCalculator: rebalancingPage.renderRebalanceCalculator
+});
   // Stocks
   Object.assign(window, {
     doBuy: stocksPage.doBuy,
