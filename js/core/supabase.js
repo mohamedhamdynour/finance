@@ -3,6 +3,7 @@
 //  مسؤول عن: قراءة/حفظ رابط ومفتاح المشروع، إرسال الطلبات، RPC
 // ══════════════════════════════════════════════════════════════════
 import { conn } from '../state.js';
+import { retryWithBackoff, isNetworkError } from './network.js';
 
 const STORAGE_KEYS = { url: 'sb_url', key: 'sb_key' };
 
@@ -24,21 +25,41 @@ export function authHeaders() {
 }
 
 // ─── الطلب الأساسي ─────────────────────────────────────────────
-export async function api(path, method = 'GET', body = null) {
-  const r = await fetch(conn.SB_URL + '/rest/v1/' + path, {
-    method,
-    headers: authHeaders(),
-    ...(body ? { body: JSON.stringify(body) } : {})
+export async function api(path, method = 'GET', body = null, opts = {}) {
+  const fetchOnce = async () => {
+    const r = await fetch(conn.SB_URL + '/rest/v1/' + path, {
+      method,
+      headers: authHeaders(),
+      ...(body ? { body: JSON.stringify(body) } : {})
+    });
+    if (r.status === 204) return null;
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok) {
+      const err = new Error(j.message || j.hint || ('HTTP ' + r.status));
+      err.code = j.code;
+      err.status = r.status;
+      throw err;
+    }
+    return j;
+  };
+
+  // لا تُعد المحاولة في عمليات POST/PATCH/DELETE افتراضيًا (لتجنب التكرار)
+  // إلا لو المستدعي طلب ذلك صراحةً
+  const shouldRetry = opts.retry === true || method === 'GET';
+
+  if (!shouldRetry) return fetchOnce();
+
+  return retryWithBackoff(fetchOnce, {
+    maxAttempts: method === 'GET' ? 3 : 2,
+    baseDelay: 400,
+    maxDelay: 4000,
+    onRetry: (attempt, err) => {
+      const syncEl = document.getElementById('sidebar-sync');
+      if (syncEl) {
+        syncEl.innerHTML = `<span class="sync-dot"></span> إعادة محاولة ${attempt}/2...`;
+      }
+    }
   });
-  if (r.status === 204) return null;
-  const j = await r.json().catch(() => ({}));
-  if (!r.ok) {
-    const err = new Error(j.message || j.hint || ('HTTP ' + r.status));
-    err.code = j.code;
-    err.status = r.status;
-    throw err;
-  }
-  return j;
 }
 
 // ─── اختصارات CRUD ─────────────────────────────────────────────
