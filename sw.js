@@ -6,7 +6,7 @@
 //    • عند انقطاع الشبكة → تُخدَّم الملفات الثابتة من الكاش
 // ══════════════════════════════════════════════════════════════════
 
-const CACHE_VERSION = 'v2.8.0';
+const CACHE_VERSION = 'v2.9.0';
 const CACHE_NAME = 'portfolio-' + CACHE_VERSION;
 
 const STATIC_ASSETS = [
@@ -34,6 +34,10 @@ const STATIC_ASSETS = [
   './js/ui/pages/rebalancing.js',
   './js/domain/risk.js',
   './js/ui/pages/risk.js',
+  './js/domain/forecast.js',
+'./js/ui/pages/forecast.js',
+'./js/domain/attachments.js',
+'./js/ui/attachments.js',
 ];
 
 // ─── Install: pre-cache app shell ────────────────────────────────
