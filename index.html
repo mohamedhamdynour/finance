@@ -427,7 +427,12 @@
   <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px;justify-content:space-between">
     <div style="display:flex;gap:8px;flex-wrap:wrap">
       <button class="btn btn-teal" onclick="openModal('modal-recurring-add')"><svg viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg> إضافة عملية متكررة</button>
-      <button class="btn btn-success" onclick="applyAllRecurring()"><svg viewBox="0 0 24 24"><polygon points="5 3 19 12 5 21 5 3"/></svg> تطبيق كل المستحق الآن</button>
+            <button class="btn btn-success" onclick="applyAllRecurring()">
+        <svg viewBox="0 0 24 24"><polygon points="5 3 19 12 5 21 5 3"/></svg> تطبيق كل المستحق الآن
+      </button>
+      <button class="btn btn-outline" onclick="applyAllRecurringNow()" title="يتجاهل تتبع التشغيل اليومي">
+        <svg viewBox="0 0 24 24"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"/></svg> إعادة الفحص الآن
+      </button>
     </div>
     <div class="tab-bar" id="recurring-filter-tabs" style="border:none;background:transparent"></div>
   </div>
