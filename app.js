@@ -2604,3 +2604,1235 @@ function addMoreMetal(metalType,metalTitle){
     document.getElementById('metal-buy-preview').innerHTML='';
   },30);
 }
+
+// ═══════════════════════════════════════════════════
+//  RENDER: CERTS
+// ═══════════════════════════════════════════════════
+function renderCerts(){
+  const T=calcTotals();const{certsTotal,grand}=T;
+  const alerts=getCertAlerts();
+  const totalInt=DB.certs.reduce((a,c)=>a+N2(c.total_interest),0);
+  const totalPaid=DB.certs.reduce((a,c)=>a+N2(c.interest_paid),0);
+  const todayAccrued=DB.certs.reduce((a,c)=>a+calcAccruedInterest(c),0);
+  document.getElementById('cert-kpis').innerHTML=
+    kpi('إجمالي الشهادات',fmt(certsTotal),pct(certsTotal,grand)+' من المحفظة','var(--purple)',svgIcon('<path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/>'),null)+
+    kpi('مستحق حتى اليوم',fmt(todayAccrued),(todayAccrued/Math.max(1,totalInt)*100).toFixed(1)+'% من الإجمالي','var(--blue)',svgIcon('<circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>'),null)+
+    kpi('إجمالي الفوائد المتوقعة',fmt(totalInt),'على مدى المدد كاملة','var(--green)',svgIcon('<polyline points="22 7 13.5 15.5 8.5 10.5 2 17"/>'),null)+
+    kpi('فوائد تم صرفها',fmt(totalPaid),(totalPaid/Math.max(1,totalInt)*100).toFixed(1)+'% من الإجمالي','var(--teal)',svgIcon('<polyline points="20 6 9 17 4 12"/>'),null)+
+    kpi('فوائد متبقية',fmt(totalInt-totalPaid),'لم يتم صرفها بعد','var(--gold)',svgIcon('<circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>'),null)+
+    kpi('تستحق قريباً',alerts.soon.length+alerts.expired.length,alerts.expired.length?'منتهية: '+alerts.expired.length:'خلال 30 يوم',alerts.expired.length?'var(--red)':'var(--gold)',svgIcon('<path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/>'),null);
+  let alertsHtml='';
+  if(alerts.expired.length)alertsHtml+=`<div class="alert alert-danger"><div class="alert-icon"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg></div><div class="alert-content"><div class="alert-title">شهادات منتهية — يجب اتخاذ إجراء فوري</div><div class="alert-body">${alerts.expired.map(c=>`${c.name} (${c.bank_name||''}) انتهت منذ ${Math.abs(c.daysLeft)} يوم`).join(' | ')}</div></div></div>`;
+  if(alerts.soon.length)alertsHtml+=`<div class="alert alert-warn"><div class="alert-icon"><svg viewBox="0 0 24 24"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/></svg></div><div class="alert-content"><div class="alert-title">تستحق خلال 30 يوم</div><div class="alert-body">${alerts.soon.map(c=>`${c.name}: ${c.daysLeft} يوم`).join(' | ')}</div></div></div>`;
+  document.getElementById('cert-alerts').innerHTML=alertsHtml;
+  const now=new Date();
+  document.getElementById('cert-cards').innerHTML=DB.certs.length?DB.certs.map(c=>{
+    const mat=new Date(c.maturity_date),days=Math.ceil((mat-now)/86400000);
+    const isExpired=days<0,isSoon=days>=0&&days<=30;
+    const periodsMap={'سنوي':N2(c.duration),'شهري':N2(c.duration)*12,'أسبوعي':N2(c.duration)*52,'يومي':N2(c.duration)*365};
+    const periods=periodsMap[c.payout_type||'سنوي']||N2(c.duration);
+    const perPeriod=periods>0?N2(c.total_interest)/periods:0;
+    const remaining=Math.max(0,N2(c.total_interest)-N2(c.interest_paid));
+    const accrued=calcAccruedInterest(c);
+    const paidPct=N2(c.total_interest)>0?Math.min(100,N2(c.interest_paid)/N2(c.total_interest)*100):0;
+    const statusColor=isExpired?'var(--red)':isSoon?'var(--gold)':'var(--purple)';
+    const statusLabel=isExpired?'منتهية':isSoon?days+' يوم للاستحقاق':'نشطة';
+    return`<div class="info-card">
+      <div class="info-card-strip" style="background:${statusColor}"></div>
+      <div class="info-card-body">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px">
+          <div style="min-width:0">
+            <div style="font-weight:800;font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${c.name}</div>
+            <div style="font-size:10.5px;color:var(--muted)">${c.bank_name||'—'} • ${c.payout_type||'سنوي'}</div>
+          </div>
+          <span class="badge" style="background:${statusColor}22;color:${statusColor};font-weight:800;white-space:nowrap">${statusLabel}</span>
+        </div>
+        <div>
+          <div style="font-size:20px;font-weight:900;color:var(--purple)">${fmt(c.amount)}</div>
+          <div style="font-size:11px;color:var(--muted)">فائدة ${c.rate}% • ${c.duration} سنة (${c.issued_date} → ${c.maturity_date})</div>
+        </div>
+        <div>
+          <div style="display:flex;justify-content:space-between;font-size:10.5px;color:var(--muted);margin-bottom:3px">
+            <span>عائد مُصرف: ${paidPct.toFixed(0)}%</span><span>متبقي: ${fmt(remaining)}</span>
+          </div>
+          <div class="prog-wrap"><div class="prog-bar" style="width:${paidPct}%;background:var(--teal)"></div></div>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;font-size:11px;color:var(--muted);background:var(--surface2);border-radius:8px;padding:8px">
+          <div>مستحق حتى اليوم<div style="color:var(--blue);font-weight:700">${fmt(accrued)}</div></div>
+          <div>العائد الدوري<div style="color:var(--green);font-weight:700">${fmt(perPeriod)}</div></div>
+          <div>عائد مُصرف<div style="color:var(--teal);font-weight:700">${fmt(c.interest_paid)}</div></div>
+          <div>إجمالي الفائدة<div style="color:var(--green);font-weight:700">+${fmt(c.total_interest)}</div></div>
+        </div>
+      </div>
+      <div class="info-card-footer">
+        <button class="btn btn-xs btn-success" onclick="openCertPayout(${c.id})" title="صرف عائد">صرف عائد</button>
+        <button class="btn-icon edit" onclick="editCert(${c.id})" title="تعديل"><svg viewBox="0 0 24 24"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg></button>
+        <button class="btn-icon danger" onclick="deleteCert(${c.id})" title="حذف"><svg viewBox="0 0 24 24"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a1 1 0 011-1h4a1 1 0 011 1v2"/></svg></button>
+      </div>
+    </div>`;
+  }).join(''):`<div class="empty-state" style="padding:32px;text-align:center;color:var(--muted);grid-column:1/-1"><p>لا توجد شهادات</p></div>`;
+}
+
+// ═══════════════════════════════════════════════════
+//  RENDER: DEBTS
+// ═══════════════════════════════════════════════════
+function renderDebts(){
+  const T=calcTotals();
+  document.getElementById('debt-kpis').innerHTML=
+    kpi('ديون عليّ',fmt(T.debtsOwed),'مجموع الالتزامات','var(--red)',svgIcon('<path d="M20.84 4.61a5.5 5.5 0 00-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 00-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 000-7.78"/>'),null)+
+    kpi('ديون لي',fmt(T.debtsOwing),'مجموع المستحقات لي','var(--green)',svgIcon('<polyline points="22 7 13.5 15.5 8.5 10.5 2 17"/>'),null)+
+    kpi('صافي الوضع',fmt(T.debtsOwing-T.debtsOwed),'لي × عليّ',T.debtsOwing>=T.debtsOwed?'var(--green)':'var(--red)',svgIcon('<line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6"/>'),null)+
+    kpi('عدد الالتزامات',DB.debts.length,'إجمالي العقود','var(--muted)',svgIcon('<circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>'),null);
+  if(!DB.debts.length){document.getElementById('debts-list').innerHTML=`<div class="empty-state" style="padding:48px;text-align:center;color:var(--muted)"><p>لا توجد ديون أو التزامات مسجلة</p></div>`;return}
+  document.getElementById('debts-list').innerHTML=DB.debts.map(d=>{
+    const now=new Date(),due=d.due_date?new Date(d.due_date):null;
+    const isOverdue=due&&now>due&&N2(d.remaining)>0;
+    const daysLeft=due?Math.ceil((due-now)/86400000):null;
+    const pctPaid=N2(d.amount)>0?pctN(N2(d.amount)-N2(d.remaining),N2(d.amount)):0;
+    const payments=DB.debtPayments.filter(p=>p.debt_id===d.id);
+    const stripColor=isOverdue?'var(--red)':d.type==='دين علي'?'var(--gold)':'var(--green)';
+    return`<div class="debt-card${isOverdue?' overdue':''}" style="border-top:3px solid ${stripColor};padding-top:13px">
+      <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:12px;flex-wrap:wrap;gap:8px">
+        <div>
+          <div style="font-weight:800;font-size:15px;color:var(--text)">${d.name}</div>
+          <div style="font-size:11px;color:var(--muted);margin-top:3px">${d.party||''} • ${d.type} ${d.rate>0?'• فائدة '+d.rate+'%':''}</div>
+        </div>
+        <div style="text-align:left">
+          <div style="font-size:20px;font-weight:900;color:${d.type==='دين علي'?'var(--red)':'var(--green)'}">${fmt(d.remaining)}</div>
+          <div style="font-size:11px;color:var(--muted)">من أصل ${fmt(d.amount)}</div>
+        </div>
+      </div>
+      <div class="prog-wrap lg" style="margin-bottom:10px"><div class="prog-bar" style="width:${Math.min(pctPaid,100)}%;background:${pctPaid>=100?'var(--green)':'var(--teal)'}"></div></div>
+      <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--muted);margin-bottom:10px;flex-wrap:wrap;gap:4px">
+        <span>مدفوع: ${pctPaid.toFixed(0)}%</span>
+        ${d.start_date?`<span>البداية: ${d.start_date}</span>`:''}
+        ${d.due_date?`<span style="${isOverdue?'color:var(--red);font-weight:700':''}">الاستحقاق: ${d.due_date}${daysLeft!==null?' ('+Math.abs(daysLeft)+(daysLeft<0?' يوم مضى':' يوم متبقي')+')':''}</span>`:''}
+        ${payments.length?`<span>${payments.length} دفعة</span>`:''}
+      </div>
+      <div style="display:flex;gap:6px;flex-wrap:wrap">
+        <button class="btn btn-xs btn-success" onclick="openDebtPay(${d.id})">دفعة</button>
+        <button class="btn btn-xs btn-outline" onclick="editDebt(${d.id})">تعديل</button>
+        <button class="btn btn-xs btn-danger" onclick="deleteDebt(${d.id})">حذف</button>
+      </div>
+      ${d.notes?`<div style="font-size:11px;color:var(--muted);margin-top:8px;padding-top:8px;border-top:.5px solid var(--border)">${d.notes}</div>`:''}
+    </div>`;
+  }).join('');
+  const paymentsLogEl=document.getElementById('debts-payments-log');
+  if(paymentsLogEl){
+    if(DB.debtPayments.length){
+      paymentsLogEl.innerHTML=`<div class="card" style="margin-top:16px">
+        <div class="card-header"><div class="card-title">سجل الدفعات</div></div>
+        <div class="card-body no-pad"><div class="table-wrap"><table>
+          <thead><tr><th>التاريخ</th><th>الدين / الالتزام</th><th>المبلغ</th><th>الحساب</th><th>ملاحظات</th><th></th></tr></thead>
+          <tbody>${[...DB.debtPayments].sort((a,b)=>b.date>a.date?1:-1).map(p=>{
+            const debt=DB.debts.find(d=>d.id===p.debt_id);
+            const bank=DB.banks.find(b=>b.id===p.bank_id);
+            return '<tr><td>'+p.date+'</td><td style="font-weight:700">'+(debt?.name||'—')+'</td><td class="td-num pos" style="direction:ltr">'+fmt(p.amount)+'</td><td class="muted">'+(p.bank_id?bankColorDot(p.bank_id)+(bank?.name||'—'):'—')+'</td><td class="muted">'+(p.notes||'—')+'</td><td><button class="btn-icon danger" onclick="deleteDebtPayment('+p.id+')" title="حذف"><svg viewBox="0 0 24 24"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a1 1 0 011-1h4a1 1 0 011 1v2"/></svg></button></td></tr>';
+          }).join('')}</tbody>
+        </table></div></div>
+      </div>`;
+    } else {
+      paymentsLogEl.innerHTML='';
+    }
+  }
+}
+function openDebtPay(debtId){
+  populateSelect('edp-bank','<option value="">— لا يوجد —</option>');
+  document.getElementById('edp-debt').innerHTML=DB.debts.map(d=>`<option value="${d.id}" ${d.id===debtId?'selected':''}>${d.name} | متبقي: ${fmt(d.remaining)}</option>`).join('');
+  document.getElementById('edp-date').value=today();document.getElementById('edp-amount').value='';document.getElementById('edp-notes').value='';
+  openModal('modal-debt-pay');
+}
+
+// ═══════════════════════════════════════════════════
+//  RENDER: DIVIDENDS
+// ═══════════════════════════════════════════════════
+function renderDividends(){
+  const total=DB.dividends.reduce((a,d)=>a+N2(d.amount),0);
+  const bySymbol={};DB.dividends.forEach(d=>{if(!bySymbol[d.symbol])bySymbol[d.symbol]=0;bySymbol[d.symbol]+=N2(d.amount)});
+  const top=Object.entries(bySymbol).sort((a,b)=>b[1]-a[1])[0];
+  document.getElementById('div-kpis').innerHTML=
+    kpi('إجمالي التوزيعات',fmt(total),'','var(--purple)',svgIcon('<line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6"/>'),null)+
+    kpi('عدد التوزيعات',DB.dividends.length,'','var(--blue)',svgIcon('<circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>'),null)+
+    (top?kpi('أعلى مصدر',fmt(top[1]),top[0],'var(--green)',svgIcon('<polyline points="22 7 13.5 15.5 8.5 10.5 2 17"/>'),null):'');
+  document.getElementById('div-tbody').innerHTML=DB.dividends.length?DB.dividends.map(d=>`<tr>
+    <td>${d.date}</td><td class="td-sym">${d.symbol}</td>
+    <td style="color:var(--green);font-weight:700">${fmt(d.amount)}</td>
+    <td class="muted">${d.bank_id?bankColorDot(d.bank_id)+(DB.banks.find(b=>b.id===d.bank_id)?.name||'—'):'—'}</td>
+    <td class="muted">${d.notes||'—'}</td>
+    <td class="td-actions">
+      <button class="btn-icon edit" onclick="editDividend(${d.id})"><svg viewBox="0 0 24 24"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg></button>
+      <button class="btn-icon danger" onclick="deleteDividend(${d.id})"><svg viewBox="0 0 24 24"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a1 1 0 011-1h4a1 1 0 011 1v2"/></svg></button>
+    </td>
+  </tr>`).join(''):`<tr><td colspan="6" style="text-align:center;padding:24px;color:var(--muted)">لا توجد توزيعات</td></tr>`;
+}
+
+// ═══════════════════════════════════════════════════
+//  RENDER: RECURRING
+// ═══════════════════════════════════════════════════
+function setRecurringFilter(v){UI.recurringFilter=v;renderRecurring();}
+function renderRecurring(){
+  const freqLabel={monthly:'شهري',weekly:'أسبوعي',yearly:'سنوي'};
+  const freqMonthlyFactor={monthly:1,weekly:4.345,yearly:1/12};
+  const typeIcons={
+    'إيداع':'<path d="M12 5v14M5 12l7 7 7-7"/>',
+    'سحب':'<path d="M12 19V5M5 12l7-7 7 7"/>'
+  };
+  const now=today();
+  const items=DB.recurring.map(r=>{
+    const next=nextRecDate(r);
+    const daysUntil=Math.ceil((new Date(next)-new Date(now))/86400000);
+    const isDue=next<=now;
+    return{...r,next,daysUntil,isDue};
+  });
+  const activeCount=items.length;
+  const dueCount=items.filter(i=>i.isDue).length;
+  const monthlyTotal=items.filter(i=>i.type==='إيداع').reduce((a,i)=>a+N2(i.amount)*(freqMonthlyFactor[i.freq]||1),0)
+    -items.filter(i=>i.type==='سحب').reduce((a,i)=>a+N2(i.amount)*(freqMonthlyFactor[i.freq]||1),0);
+  document.getElementById('recurring-kpis').innerHTML=
+    kpi('عمليات نشطة',activeCount,'إجمالي العمليات المتكررة المسجلة','var(--teal)',svgIcon('<polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 014-4h14"/><polyline points="7 23 3 19 7 15"/><path d="M21 13v2a4 4 0 01-4 4H3"/>'),null)+
+    kpi('مستحق الآن',dueCount,dueCount>0?'يحتاج تطبيق':'كل شيء محدَّث','var(--gold)',svgIcon('<circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/>'),null)+
+    kpi('الأثر الشهري الصافي',fmt(monthlyTotal),'بعد تسوية الإيداعات والسحوبات على أساس شهري',monthlyTotal>=0?'var(--green)':'var(--red)',svgIcon('<line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6"/>'),null);
+  const filterDefs=[
+    {key:'ALL',label:'الكل',count:items.length},
+    {key:'DUE',label:'مستحق الآن',count:dueCount},
+    {key:'إيداع',label:'إيداعات',count:items.filter(i=>i.type==='إيداع').length},
+    {key:'سحب',label:'سحوبات',count:items.filter(i=>i.type==='سحب').length},
+  ];
+  document.getElementById('recurring-filter-tabs').innerHTML=filterDefs.map(f=>
+    `<div class="tab ${UI.recurringFilter===f.key?'active':''}" onclick="setRecurringFilter('${f.key}')">${f.label} (${f.count})</div>`
+  ).join('');
+  let filtered=items;
+  if(UI.recurringFilter==='DUE')filtered=items.filter(i=>i.isDue);
+  else if(UI.recurringFilter==='إيداع'||UI.recurringFilter==='سحب')filtered=items.filter(i=>i.type===UI.recurringFilter);
+  filtered.sort((a,b)=>a.next<b.next?-1:1);
+  if(!filtered.length){
+    document.getElementById('recurring-cards').innerHTML=`<div class="empty-state" style="padding:48px;text-align:center;color:var(--muted);grid-column:1/-1"><p>لا توجد عمليات متكررة${UI.recurringFilter!=='ALL'?' في هذا التصنيف':''}</p></div>`;
+    return;
+  }
+  document.getElementById('recurring-cards').innerHTML=filtered.map(r=>{
+    const isIn=r.type==='إيداع';
+    const bank=DB.banks.find(b=>b.id===r.bank_id);
+    const statusBadge=r.isDue
+      ?`<span class="badge" style="background:var(--green-l);color:var(--green);font-weight:800">مستحق الآن</span>`
+      :r.daysUntil<=3?`<span class="badge" style="background:var(--gold-l);color:var(--gold);font-weight:800">خلال ${r.daysUntil} يوم</span>`
+      :`<span class="badge badge-gray">بعد ${r.daysUntil} يوم</span>`;
+    return`<div class="info-card">
+      <div class="info-card-strip" style="background:${isIn?'var(--green)':'var(--red)'}"></div>
+      <div class="info-card-body">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px">
+          <div style="display:flex;align-items:center;gap:8px;min-width:0">
+            <span style="width:34px;height:34px;border-radius:9px;background:${isIn?'var(--green-l)':'var(--red-l)'};color:${isIn?'var(--green)':'var(--red)'};display:flex;align-items:center;justify-content:center;flex-shrink:0"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${typeIcons[r.type]||''}</svg></span>
+            <div style="min-width:0">
+              <div style="font-weight:800;font-size:13.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${r.name}</div>
+              <div style="font-size:10.5px;color:var(--muted)">${freqLabel[r.freq]||r.freq}</div>
+            </div>
+          </div>
+          ${statusBadge}
+        </div>
+        <div style="font-size:20px;font-weight:900;color:${isIn?'var(--green)':'var(--red)'}">${isIn?'+':'-'}${fmt(r.amount)}</div>
+        <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--muted)">
+          <span>${bank?bankColorDot(bank.id)+bank.name:'— بدون حساب —'}</span>
+          <span>القادم: ${r.next}</span>
+        </div>
+        ${r.last_applied?`<div style="font-size:10px;color:var(--muted)">آخر تطبيق: ${r.last_applied}</div>`:`<div style="font-size:10px;color:var(--muted)">لم يُطبَّق بعد</div>`}
+      </div>
+      <div class="info-card-footer">
+        <button class="btn btn-xs ${r.isDue?'btn-success':'btn-outline'}" onclick="applyRecurring(${r.id})" ${!r.isDue?'disabled':''} title="تطبيق الآن">تطبيق</button>
+        <button class="btn-icon edit" onclick="editRecurring(${r.id})" title="تعديل"><svg viewBox="0 0 24 24"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg></button>
+        <button class="btn-icon danger" onclick="deleteRecurring(${r.id})" title="حذف"><svg viewBox="0 0 24 24"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a1 1 0 011-1h4a1 1 0 011 1v2"/></svg></button>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+// ═══════════════════════════════════════════════════
+//  RENDER: GOALS
+// ═══════════════════════════════════════════════════
+function renderGoals(){
+  const T=calcTotals();
+  if(!DB.goals.length){document.getElementById('goals-list').innerHTML=`<div class="empty-state" style="padding:48px;text-align:center;color:var(--muted)"><p>لا توجد أهداف مالية. أضف هدفاً جديداً</p></div>`;return}
+  document.getElementById('goals-list').innerHTML=DB.goals.map(g=>{
+    let cur=T.grand;
+    if(g.category==='banks')cur=T.totalBanks;else if(g.category==='stocks')cur=T.stocksVal;else if(g.category==='metals')cur=T.metalsVal;else if(g.category==='certs')cur=T.certsTotal;
+    const p=Math.min(pctN(cur,g.target),100),rem=Math.max(0,N2(g.target)-cur);
+    const goalColor=p>=100?'var(--green)':p>=70?'var(--teal)':'var(--purple)';
+    return`<div class="goal-card" style="border-top:3px solid ${goalColor};padding-top:13px">
+      <div class="goal-header">
+        <div><div class="goal-name">${g.name}</div><div class="goal-meta">${g.category==='all'?'كل المحفظة':g.category==='banks'?'البنوك':g.category==='stocks'?'الأسهم':g.category==='metals'?'المعادن':'الشهادات'}</div></div>
+        <div style="text-align:left"><div class="goal-pct">${p.toFixed(1)}%</div><div class="goal-stats">${fmt(cur)} / ${fmt(g.target)}</div></div>
+      </div>
+      <div class="prog-wrap lg" style="margin-bottom:8px"><div class="prog-bar" style="width:${p}%;background:${goalColor}"></div></div>
+      <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--muted)">
+        <span>${p<100?'متبقي '+fmt(rem):'تم تحقيق الهدف!'}</span>
+        <div style="display:flex;gap:4px">
+          <button class="btn-icon edit" onclick="editGoal(${g.id})" title="تعديل"><svg viewBox="0 0 24 24"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg></button>
+          <button class="btn-icon danger" onclick="deleteGoal(${g.id})" title="حذف"><svg viewBox="0 0 24 24"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a1 1 0 011-1h4a1 1 0 011 1v2"/></svg></button>
+        </div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+// ═══════════════════════════════════════════════════
+//  RENDER: PRICES
+// ═══════════════════════════════════════════════════
+function renderPrices(){
+  const h=getHoldings();
+  const heldSyms=Object.keys(h);
+  const orphanSyms=DB.stockPrices.map(p=>p.symbol).filter(s=>!h[s]);
+  const rowHtml=(sym,isHeld)=>{
+    const p=DB.stockPrices.find(x=>x.symbol===sym);
+    return`<div class="price-item">
+      <div>
+        <div class="price-item-label">${sym}${!isHeld?` <span style="font-size:9.5px;color:var(--red);font-weight:700;background:var(--red-l);padding:1px 5px;border-radius:4px">مُباع بالكامل</span>`:''}</div>
+        <div class="price-item-sub">${p?.name||h[sym]?.name||''} ${!isHeld?'— <button class="btn btn-xs btn-danger" onclick="removeOrphanStock(\''+sym+'\')">حذف السعر القديم</button>':''}</div>
+      </div>
+      <input class="price-input" type="number" step="0.01" id="sp-${sym}" value="${p?.current_price||''}" placeholder="0.00">
+    </div>`;
+  };
+  document.getElementById('stock-prices-list').innerHTML=
+    (heldSyms.length?heldSyms.map(s=>rowHtml(s,true)).join(''):`<div style="color:var(--muted);font-size:12px;padding:12px">لا توجد أسهم مملوكة حالياً</div>`)
+    +(orphanSyms.length?`<details style="margin-top:10px"><summary style="cursor:pointer;font-size:11px;color:var(--muted);font-weight:700;padding:6px 0">أسعار قديمة لأسهم مُباعة بالكامل (${orphanSyms.length})</summary>${orphanSyms.map(s=>rowHtml(s,false)).join('')}</details>`:'');
+  const mh=getMetalHoldings();
+  const heldTypes=new Set(Object.values(mh).filter(v=>v.weight>0.001).map(v=>v.metal_type.split('|')[0].trim()));
+  const allDbTypes=new Set(DB.metalPrices.map(p=>p.metal_type));
+  DB.metalTxns.forEach(t=>{if(t.metal_type)allDbTypes.add(t.metal_type.split('|')[0].trim())});
+  const orphanTypes=[...allDbTypes].filter(t=>!heldTypes.has(t)).sort();
+  const heldTypeList=[...heldTypes].sort();
+  const metalRowHtml=(type,isHeld)=>{
+    const p=DB.metalPrices.find(x=>x.metal_type===type);
+    const holdingsCount=Object.values(mh).filter(v=>v.metal_type.split('|')[0].trim()===type&&v.weight>0.001).length;
+    return`<div class="price-item">
+      <div>
+        <div class="price-item-label" style="color:${isHeld?'var(--gold)':'var(--muted)'};font-weight:800">${type}${!isHeld?` <span style="font-size:9.5px;color:var(--red);font-weight:700;background:var(--red-l);padding:1px 5px;border-radius:4px">مُباع بالكامل</span>`:''}</div>
+        <div class="price-item-sub" style="color:var(--muted);font-size:10.5px">
+          ${holdingsCount>0?holdingsCount+' حيازة نشطة':''}
+          ${p?.updated_at?' | آخر تحديث: '+new Date(p.updated_at).toLocaleDateString('ar-EG'):''}
+        </div>
+      </div>
+      <input class="price-input" type="number" step="0.01" id="mp-${encodeID(type)}" value="${p?.price_per_gram||''}" placeholder="ج.م/جرام">
+    </div>`;
+  };
+  document.getElementById('metal-prices-list').innerHTML=
+    (heldTypeList.length?heldTypeList.map(t=>metalRowHtml(t,true)).join(''):`<div style="color:var(--muted);font-size:12px;padding:12px">لا توجد معادن مملوكة حالياً</div>`)
+    +(orphanTypes.length?`<details style="margin-top:10px"><summary style="cursor:pointer;font-size:11px;color:var(--muted);font-weight:700;padding:6px 0">أسعار قديمة لمعادن مُباعة بالكامل (${orphanTypes.length})</summary>${orphanTypes.map(t=>metalRowHtml(t,false)).join('')}</details>`:'');
+  const currencies=[...new Set(DB.banks.map(b=>b.currency||'EGP').filter(c=>c!=='EGP'))];
+  const lastFx=localStorage.getItem('lastFxFetchDate');
+  const fxStatusHtml=`<div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;padding:10px 2px;margin-bottom:6px;border-bottom:.5px solid var(--border)">
+    <div style="font-size:11px;color:var(--muted)">${lastFx===today()?'✓ تم التحديث التلقائي اليوم ('+lastFx+')':lastFx?'آخر تحديث تلقائي: '+lastFx:'لم يتم التحديث التلقائي بعد'}</div>
+    <button class="btn btn-xs btn-teal" onclick="autoFetchExchangeRates(true)" id="fx-fetch-btn">جلب الأسعار الآن تلقائيًا</button>
+  </div>`;
+  document.getElementById('exchange-rates-list').innerHTML=currencies.length?
+    fxStatusHtml+currencies.map(cur=>{const r=DB.exchangeRates.find(x=>x.currency===cur);return`<div class="price-item"><div><div class="price-item-label">${cur} → EGP</div><div class="price-item-sub">آخر تحديث: ${r?.updated_at?new Date(r.updated_at).toLocaleDateString('ar-EG'):'—'}</div></div><div style="display:flex;gap:6px;align-items:center"><input class="price-input" type="number" step="0.0001" id="exr-${cur}" value="${r?.rate||''}" placeholder="مثال: 49.5"><button class="btn btn-xs btn-teal" onclick="saveExchangeRate('${cur}')">حفظ يدوي</button></div></div>`}).join(''):`<div style="color:var(--muted);font-size:12px;padding:12px">لا توجد حسابات بعملات أجنبية</div>`;
+}
+async function removeOrphanStock(sym){
+  if(!confirm(`حذف سعر ${sym} من قاعدة البيانات؟`))return;
+  try{await api('stock_prices?symbol=eq.'+encodeURIComponent(sym),'DELETE');toast('تم الحذف');await loadAll()}catch(e){toast('خطأ: '+e.message,false)}
+}
+
+// ═══════════════════════════════════════════════════
+//  RENDER: STOCK HEATMAP
+// ═══════════════════════════════════════════════════
+function renderStockHeatmapInto(h,div){div.id='stocks-heatmap';renderStockHeatmap(h,div)}
+function renderStockHeatmap(h,container){
+  if(typeof container==='string')container=document.getElementById(container);
+  if(!container)return;
+  container.innerHTML='';
+  const entries=Object.entries(h);if(!entries.length)return;
+  const T=calcTotals();
+  const items=entries.map(([sym,v])=>{
+    const cp=getStockPrice(sym)||v.avgPrice,curVal=v.qty*cp,pnl=curVal-v.totalCost,ret=v.totalCost?pnl/v.totalCost*100:0;
+    return{sym,name:v.name,curVal,ret,pnl,share:T.stocksVal>0?curVal/T.stocksVal*100:0};
+  }).sort((a,b)=>b.curVal-a.curVal);
+  const getColor=(ret)=>{
+    if(ret>15)return{bg:'#065f46',text:'#a7f3d0'};
+    if(ret>8) return{bg:'#0d9488',text:'#ccfbf1'};
+    if(ret>3) return{bg:'#14b8a6',text:'#f0fdfa'};
+    if(ret>0) return{bg:'#2dd4bf',text:'#134e4a'};
+    if(ret===0)return{bg:'#64748b',text:'#f1f5f9'};
+    if(ret>-3) return{bg:'#f87171',text:'#450a0a'};
+    if(ret>-8) return{bg:'#ef4444',text:'#ffe4e6'};
+    if(ret>-15)return{bg:'#dc2626',text:'#fee2e2'};
+    return          {bg:'#7f1d1d',text:'#fecaca'};
+  };
+  const card=document.createElement('div');card.className='card';card.style='margin-bottom:16px';
+  const totalVal=items.reduce((a,x)=>a+x.curVal,0)||1;
+  const BOX_W=760,BOX_H=220;
+  function squarify(items,x,y,w,h){
+    if(!items.length)return[];
+    if(items.length===1){return[{...items[0],x,y,w,h}];}
+    const splitH=w>=h;
+    const half=Math.floor(items.length/2);
+    const firstHalf=items.slice(0,half||1);
+    const secondHalf=items.slice(half||1);
+    const firstVal=firstHalf.reduce((a,x)=>a+x.curVal,0);
+    const ratio=firstVal/totalVal;
+    if(splitH){
+      const w1=Math.max(60,w*ratio);
+      return [...squarify(firstHalf,x,y,w1,h),...squarify(secondHalf,x+w1,y,w-w1,h)];
+    }else{
+      const h1=Math.max(40,h*ratio);
+      return [...squarify(firstHalf,x,y,w,h1),...squarify(secondHalf,x,y+h1,w,h-h1)];
+    }
+  }
+  const layout=squarify(items,0,0,BOX_W,BOX_H);
+  const cells=layout.map(item=>{
+    const c=getColor(item.ret);
+    const fs=Math.max(10,Math.min(16,Math.sqrt(item.w*item.h)/7));
+    const showRet=item.h>36&&item.w>50;
+    const showVal=item.h>54&&item.w>70;
+    const leftPct=(item.x/BOX_W*100).toFixed(3),topPct=(item.y/BOX_H*100).toFixed(3);
+    const wPct=(Math.max(4,item.w-3)/BOX_W*100).toFixed(3),hPct=(Math.max(4,item.h-3)/BOX_H*100).toFixed(3);
+    return`<div title="${item.name}\nالقيمة: ${fmt(item.curVal)}\nر/خ: ${item.ret>=0?'+':''}${fmt(item.pnl)}\nعائد: ${item.ret>=0?'+':''}${item.ret.toFixed(2)}%\nالحصة: ${item.share.toFixed(1)}%"
+      style="position:absolute;left:${leftPct}%;top:${topPct}%;width:${wPct}%;height:${hPct}%;
+      background:${c.bg};border-radius:6px;padding:5px 6px;cursor:default;overflow:hidden;
+      display:flex;flex-direction:column;justify-content:center;align-items:center;text-align:center;
+      transition:filter .15s,transform .15s;box-shadow:0 1px 3px rgba(0,0,0,.25)"
+      onmouseover="this.style.filter='brightness(1.15)';this.style.zIndex='5'"
+      onmouseout="this.style.filter='';this.style.zIndex=''">
+      <div style="font-weight:900;color:${c.text};font-size:clamp(9px,${fs}px,${fs}px);line-height:1.1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;width:100%;text-align:center">${item.sym}</div>
+      ${showRet?`<div style="font-weight:700;color:${c.text};font-size:${Math.max(9,fs-2)}px;opacity:.92">${item.ret>=0?'+':''}${item.ret.toFixed(1)}%</div>`:''}
+      ${showVal?`<div style="color:${c.text};font-size:${Math.max(8,fs-3)}px;opacity:.75">${fmtK(item.curVal)}</div>`:''}
+    </div>`;
+  }).join('');
+  const legend=['خسارة > 15%','خسارة','محايد','ربح','ربح > 15%'].map((label,i)=>{
+    const colors=['#7f1d1d','#ef4444','#64748b','#14b8a6','#065f46'];
+    return`<span style="display:flex;align-items:center;gap:4px;font-size:10.5px;color:var(--muted)">
+      <span style="width:10px;height:10px;border-radius:2px;background:${colors[i]};flex-shrink:0"></span>${label}
+    </span>`;
+  }).join('');
+  card.innerHTML=`<div class="card-header">
+    <div class="card-title">
+      <div class="card-title-icon" style="background:var(--blue-l);color:var(--blue)">
+        <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="9"/><rect x="14" y="3" width="7" height="5"/><rect x="14" y="12" width="7" height="9"/><rect x="3" y="16" width="7" height="5"/></svg>
+      </div>
+      خريطة حرارة الأسهم
+      <span style="font-size:10px;color:var(--muted);font-weight:400">(الحجم = الحصة | اللون = العائد)</span>
+    </div>
+    <div style="display:flex;gap:6px;flex-wrap:wrap">${legend}</div>
+  </div>
+  <div class="card-body" style="padding:10px">
+    <div style="position:relative;width:100%;aspect-ratio:${BOX_W}/${BOX_H};overflow:hidden;border-radius:8px">
+      ${cells}
+    </div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px;padding-top:8px;border-top:.5px solid var(--border)">
+      ${items.map(x=>{const c=getColor(x.ret);return`<span style="display:inline-flex;align-items:center;gap:4px;font-size:11px">
+        <span style="width:8px;height:8px;border-radius:2px;background:${c.bg};display:inline-block"></span>
+        <strong style="color:var(--text)">${x.sym}</strong>
+        <span style="color:${x.ret>=0?'var(--green)':'var(--red)'};font-weight:700">${x.ret>=0?'+':''}${x.ret.toFixed(1)}%</span>
+        <span style="color:var(--muted);font-size:10px">${x.share.toFixed(0)}%</span>
+      </span>`;}).join('')}
+    </div>
+  </div>`;
+  container.appendChild(card);
+}
+
+// ═══════════════════════════════════════════════════
+//  REPORTS
+// ═══════════════════════════════════════════════════
+function calcTotalsForPeriod(pStart,pEnd){
+  const CREDIT=['إيداع','تحويل وارد','رصيد افتتاحي','عائد شهادة','أرباح'];
+  const todayStr=today();const pe=pEnd||todayStr;
+  const h={};
+  [...DB.stockTxns].filter(t=>t.date<=pe).sort((a,b)=>a.date>b.date?1:a.date<b.date?-1:a.id-b.id).forEach(t=>{
+    if(!h[t.symbol])h[t.symbol]={name:t.name,type:t.sec_type||'سهم',qty:0,totalCost:0,market:t.market||'EGX',currency:t.price_currency||'EGP'};
+    if(t.type==='شراء'){h[t.symbol].qty+=N2(t.quantity);h[t.symbol].totalCost+=N2(t.net);}
+    else if(t.type==='بيع'){const avg=h[t.symbol].qty>0?h[t.symbol].totalCost/h[t.symbol].qty:0;const sq=Math.min(N2(t.quantity),h[t.symbol].qty);h[t.symbol].qty-=sq;h[t.symbol].totalCost-=avg*sq;if(h[t.symbol].qty<0.001){h[t.symbol].qty=0;h[t.symbol].totalCost=0;}}
+  });
+  Object.values(h).forEach(v=>{v.avgPrice=v.qty>0.001?v.totalCost/v.qty:0});
+  const hF=Object.fromEntries(Object.entries(h).filter(([,v])=>v.qty>0.001));
+  const mh={};
+  [...DB.metalTxns].filter(t=>t.date<=pe).sort((a,b)=>a.date>b.date?1:a.date<b.date?-1:a.id-b.id).forEach(t=>{
+    const key=(t.notes?.trim())?t.metal_type+'|'+t.notes.trim():t.metal_type;
+    if(!mh[key])mh[key]={metal_type:t.metal_type,title:(t.notes||'').trim(),weight:0,totalCost:0};
+    if(t.op==='شراء'){mh[key].weight+=N2(t.weight);mh[key].totalCost+=N2(t.net);}
+    else{const avg=mh[key].weight>0?mh[key].totalCost/mh[key].weight:0;const sw=Math.min(N2(t.weight),mh[key].weight);mh[key].weight-=sw;mh[key].totalCost-=avg*sw;if(mh[key].weight<0.001){mh[key].weight=0;mh[key].totalCost=0;}}
+  });
+  Object.values(mh).forEach(v=>{v.avgPrice=v.weight>0.001?v.totalCost/v.weight:0});
+  const mhF=Object.fromEntries(Object.entries(mh).filter(([,v])=>v.weight>0.001));
+  const bTxns=DB.bankTxns.filter(t=>t.date>=pStart&&t.date<=pe);
+  const sTxns=DB.stockTxns.filter(t=>t.date>=pStart&&t.date<=pe);
+  const mTxns=DB.metalTxns.filter(t=>t.date>=pStart&&t.date<=pe);
+  const divs=DB.dividends.filter(t=>t.date>=pStart&&t.date<=pe);
+  const certPayouts=bTxns.filter(t=>t.type==='عائد شهادة');
+  const stocksVal=Object.entries(hF).reduce((a,[s,v])=>a+v.qty*(getStockPrice(s)||v.avgPrice),0);
+  const stocksCost=Object.values(hF).reduce((a,v)=>a+v.totalCost,0);
+  const metalsVal=Object.entries(mhF).reduce((a,[k,v])=>a+v.weight*(getMetalPrice(v.metal_type||k.split('|')[0])||v.avgPrice),0);
+  const metalsCost=Object.values(mhF).reduce((a,v)=>a+v.totalCost,0);
+  const totalBanks=DB.banks.reduce((a,b)=>a+toEGP(N2(b.balance),b.currency),0);
+  const certsInPeriod=DB.certs.filter(c=>c.issued_date<=pe);
+  const certsTotal=certsInPeriod.reduce((a,c)=>a+N2(c.amount),0);
+  const certsInterest=certsInPeriod.reduce((a,c)=>a+N2(c.total_interest),0);
+  const certsPaid=certPayouts.reduce((a,t)=>a+N2(t.amount),0);
+  const divTotal=divs.reduce((a,d)=>a+N2(d.amount),0);
+  const realizedStockPnl=sTxns.filter(t=>t.type==='بيع').reduce((a,t)=>a+N2(t.profit),0);
+  const stockBought=sTxns.filter(t=>t.type==='شراء').reduce((a,t)=>a+N2(t.net),0);
+  const cashIn=bTxns.filter(t=>CREDIT.includes(t.type)).reduce((a,t)=>a+N2(t.amount),0);
+  const cashOut=bTxns.filter(t=>!CREDIT.includes(t.type)).reduce((a,t)=>a+N2(t.amount),0);
+  const grand=totalBanks+stocksVal+metalsVal+certsTotal;
+  const pnlStocks=stocksVal-stocksCost,pnlMetals=metalsVal-metalsCost;
+  const totalPnl=pnlStocks+pnlMetals+certsPaid+divTotal;
+  const debtsOwed=DB.debts.filter(d=>d.type==='دين علي').reduce((a,d)=>a+N2(d.remaining),0);
+  const debtsOwing=DB.debts.filter(d=>d.type==='دين لي').reduce((a,d)=>a+N2(d.remaining),0);
+  return{h:hF,mh:mhF,grand,totalBanks,stocksVal,stocksCost,metalsVal,metalsCost,certsTotal,certsInterest,certsPaid,divTotal,pnlStocks,pnlMetals,totalPnl,debtsOwed,debtsOwing,realizedStockPnl,stockBought,cashIn,cashOut,txnCount:bTxns.length+sTxns.length+mTxns.length,periodStart:pStart,periodEnd:pe};
+}
+function getReportPeriodBounds(){
+  const p=UI.globalPeriod||'1y';
+  if(p==='custom'&&UI.customFrom&&UI.customTo)return{pStart:UI.customFrom,pEnd:UI.customTo};
+  return{pStart:periodStart(p),pEnd:today()};
+}
+function renderReports(){
+  const{pStart,pEnd}=getReportPeriodBounds();
+  const PT=calcTotalsForPeriod(pStart,pEnd);
+  const{h,mh,grand,totalBanks,stocksVal,stocksCost,metalsVal,metalsCost,certsTotal,certsInterest,certsPaid,divTotal,pnlStocks,pnlMetals,totalPnl,debtsOwed,debtsOwing,realizedStockPnl,cashIn,cashOut}=PT;
+  const invested=stocksCost+metalsCost+certsTotal;
+  const roi=invested>0?totalPnl/invested*100:0;
+  const retS=stocksCost>0?pnlStocks/stocksCost*100:0;
+  const retM=metalsCost>0?pnlMetals/metalsCost*100:0;
+  const periodLabel=pStart+' — '+pEnd;
+  const lu=document.getElementById('r-last-update');
+  if(lu)lu.textContent=new Date().toLocaleString('ar-EG')+' | الفترة: '+periodLabel;
+  document.getElementById('report-kpis').innerHTML=
+    kpi('إجمالي المحفظة',fmt(grand),'القيمة السوقية الحالية','var(--blue)',svgIcon('<path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/>'),roi)+
+    kpi('رأس المال المستثمر',fmt(invested+totalBanks),'إجمالي ما تم ضخه','var(--muted)',svgIcon('<line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6"/>'),null)+
+    kpi('العائد الصافي',fmt(totalPnl),(roi>=0?'+':'')+roi.toFixed(2)+'% ROI',totalPnl>=0?'var(--green)':'var(--red)',svgIcon('<polyline points="22 7 13.5 15.5 8.5 10.5 2 17"/>'),roi)+
+    kpi('دخل الفترة',fmt(certsPaid+divTotal+realizedStockPnl),'عوائد + توزيعات + مبيعات','var(--teal)',svgIcon('<polyline points="20 6 9 17 4 12"/>'),null)+
+    (debtsOwed>0?kpi('صافي الثروة',fmt(grand-debtsOwed),'المحفظة ناقص الالتزامات',grand-debtsOwed>=0?'var(--green)':'var(--red)',svgIcon('<path d="M20.84 4.61a5.5 5.5 0 00-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 00-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 000-7.78"/>'),null):'');
+  const catEl=document.getElementById('r-category-cards');
+  if(catEl)catEl.innerHTML=[
+    {l:'البنوك',v:totalBanks,p:grand?totalBanks/grand*100:0,sub:DB.banks.filter(b=>b.is_active!==false).length+' حساب',c:'var(--teal)',pnl:null},
+    {l:'الأسهم',v:stocksVal,p:grand?stocksVal/grand*100:0,sub:(retS>=0?'+':'')+retS.toFixed(1)+'% عائد',c:retS>=0?'var(--green)':'var(--red)',pnl:pnlStocks},
+    {l:'المعادن',v:metalsVal,p:grand?metalsVal/grand*100:0,sub:(retM>=0?'+':'')+retM.toFixed(1)+'% عائد',c:retM>=0?'var(--gold)':'var(--red)',pnl:pnlMetals},
+    {l:'الشهادات',v:certsTotal,p:grand?certsTotal/grand*100:0,sub:'مُصرَّف: '+fmt(certsPaid),c:'var(--purple)',pnl:certsPaid>0?certsPaid:null},
+  ].map(c=>`<div class="card" style="border-right:3px solid ${c.c};margin-bottom:0"><div class="card-body" style="padding:14px">
+    <div style="font-size:10px;color:var(--muted);font-weight:800;letter-spacing:.5px;margin-bottom:6px">${c.l}</div>
+    <div style="font-size:20px;font-weight:900;color:${c.c};margin-bottom:4px">${fmt(c.v)}</div>
+    <div style="display:flex;justify-content:space-between;margin-bottom:6px"><span style="font-size:11px;color:var(--muted)">${c.sub}</span><span style="font-size:13px;font-weight:900;color:${c.c}">${c.p.toFixed(1)}%</span></div>
+    <div class="prog-wrap"><div class="prog-bar" style="width:${Math.min(c.p,100)}%;background:${c.c}"></div></div>
+    ${c.pnl!=null?`<div style="font-size:11px;margin-top:6px;font-weight:700;color:${c.pnl>=0?'var(--green)':'var(--red)'}">${c.pnl>=0?'ربح':'خسارة'}: ${fmt(Math.abs(c.pnl))}</div>`:''}
+  </div></div>`).join('');
+  const stEl=document.getElementById('r-stocks-alloc');
+  if(stEl)stEl.innerHTML=Object.entries(h).length?Object.entries(h).map(([s,v],i)=>{
+    const cp=getStockPrice(s)||v.avgPrice,cv=v.qty*cp,p=stocksVal?cv/stocksVal*100:0,pnl=cv-v.totalCost;
+    return`<div class="alloc-row"><div class="alloc-dot" style="background:${PALETTE[i%PALETTE.length]}"></div><div class="alloc-label">${s} — ${v.name}</div><div class="alloc-prog"><div class="prog-wrap"><div class="prog-bar" style="width:${Math.min(p,100)}%;background:${PALETTE[i%PALETTE.length]}"></div></div></div><div class="alloc-pct">${p.toFixed(1)}%</div><div class="alloc-val ${pnl>=0?'pos':'neg'}">${pnl>=0?'+':''}${fmtK(pnl)}</div></div>`;
+  }).join(''):`<div style="color:var(--muted);font-size:12px;padding:12px">لا توجد أسهم في هذه الفترة</div>`;
+  const mtEl=document.getElementById('r-metals-alloc');
+  if(mtEl)mtEl.innerHTML=Object.entries(mh).length?Object.entries(mh).map(([t,v],i)=>{
+    const bt=v.metal_type||t.split('|')[0];const cp=getMetalPrice(bt)||v.avgPrice,cv=v.weight*cp,p=metalsVal?cv/metalsVal*100:0,pnl=cv-v.totalCost;
+    return`<div class="alloc-row"><div class="alloc-dot" style="background:${['#d97706','#f59e0b','#b45309','#92400e'][i%4]}"></div><div class="alloc-label">${v.title?bt+' — '+v.title:bt}</div><div class="alloc-prog"><div class="prog-wrap"><div class="prog-bar" style="width:${Math.min(p,100)}%;background:#d97706"></div></div></div><div class="alloc-pct">${p.toFixed(1)}%</div><div class="alloc-val ${pnl>=0?'pos':'neg'}">${pnl>=0?'+':''}${fmtK(pnl)}</div></div>`;
+  }).join(''):`<div style="color:var(--muted);font-size:12px;padding:12px">لا توجد معادن</div>`;
+  const debtsEl=document.getElementById('r-debts-section');
+  if(debtsEl){
+    if(DB.debts.length){
+      const now=new Date();
+      debtsEl.innerHTML=`<div class="grid-2">
+        <div class="card"><div class="card-header"><div class="card-title">جدول الاستحقاق</div></div>
+        <div class="card-body no-pad"><div class="table-wrap"><table><thead><tr><th>الدين</th><th>الطرف</th><th style="direction:ltr;text-align:left">المتبقي</th><th>الاستحقاق</th><th>الحالة</th></tr></thead>
+        <tbody>${DB.debts.map(d=>{const due=d.due_date?new Date(d.due_date):null;const ov=due&&now>due&&+d.remaining>0;const dl=due?Math.ceil((due-now)/86400000):null;return`<tr class="${ov?'tr-negative':''}"><td style="font-weight:700">${d.name}</td><td class="muted">${d.party||'—'}</td><td class="td-num ${d.type==='دين علي'?'neg':'pos'}" style="direction:ltr;font-weight:800">${d.type==='دين علي'?'-':'+'}${fmt(d.remaining)}</td><td>${d.due_date||'—'}</td><td style="font-size:11px;font-weight:700;color:${ov?'var(--red)':dl&&dl<=30?'var(--gold)':'var(--green)'}">${ov?'متأخر '+Math.abs(dl)+' يوم':dl!==null?dl+' يوم':'—'}</td></tr>`}).join('')}</tbody>
+        </table></div></div></div>
+        <div class="card"><div class="card-header"><div class="card-title">القدرة على السداد</div></div>
+        <div class="card-body">
+          <div style="font-size:18px;font-weight:900;margin-bottom:8px;color:${totalBanks>=debtsOwed?'var(--green)':'var(--red)'}">${totalBanks>=debtsOwed?'يمكن السداد':'السيولة غير كافية'}</div>
+          <div style="font-size:12px;color:var(--muted);margin-bottom:8px">السيولة: ${fmt(totalBanks)} | الديون: ${fmt(debtsOwed)}</div>
+          <div class="prog-wrap" style="height:10px;margin-bottom:10px"><div class="prog-bar" style="width:${Math.min(totalBanks/Math.max(1,debtsOwed)*100,100)}%;background:${totalBanks>=debtsOwed?'var(--green)':'var(--red)'}"></div></div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+            <div style="padding:10px;background:var(--red-l);border-radius:8px;text-align:center"><div style="font-weight:800;color:var(--red);font-size:16px">${fmt(debtsOwed)}</div><div style="color:var(--muted);font-size:11px">ديون عليّ</div></div>
+            <div style="padding:10px;background:var(--green-l);border-radius:8px;text-align:center"><div style="font-weight:800;color:var(--green);font-size:16px">${fmt(debtsOwing)}</div><div style="color:var(--muted);font-size:11px">ديون لي</div></div>
+          </div>
+          <div style="margin-top:8px;padding:8px;background:var(--surface2);border-radius:8px;font-size:11px;text-align:center">نسبة الدين للمحفظة: <strong style="color:${debtsOwed/Math.max(1,grand)>0.3?'var(--red)':'var(--green)'}">${(debtsOwed/Math.max(1,grand)*100).toFixed(1)}%</strong></div>
+        </div></div>
+      </div>`;
+    } else debtsEl.innerHTML='';
+  }
+  let fs='';
+  fs+=`<tr class="tr-section"><td colspan="7" style="padding:8px 14px">الحسابات البنكية — ${fmt(totalBanks)}</td></tr>`;
+  DB.banks.forEach(b=>{const bv=toEGP(N2(b.balance),b.currency||'EGP');const bc=getBankColor(b.id);fs+=`<tr><td style="padding-right:28px"><span style="display:inline-flex;align-items:center;gap:5px"><span style="width:7px;height:7px;border-radius:50%;background:${bc};display:inline-block"></span>${b.name}${b.bank_code?' ('+b.bank_code+')':''} <span style="font-size:10px;color:var(--muted)">${b.currency||'EGP'}</span></span></td><td class="td-num" style="direction:ltr">—</td><td class="td-num" style="direction:ltr;font-weight:700">${fmt(bv)}</td><td>—</td><td>—</td><td style="text-align:center">${pct(bv,totalBanks)}</td><td style="text-align:center">${pct(bv,grand)}</td></tr>`;});
+  fs+=`<tr class="fs-subtotal"><td>المجموع — بنوك</td><td style="direction:ltr">—</td><td class="td-num" style="direction:ltr;font-weight:900">${fmt(totalBanks)}</td><td>—</td><td>—</td><td style="text-align:center">100%</td><td style="text-align:center;font-weight:800">${pct(totalBanks,grand)}</td></tr>`;
+  if(Object.keys(h).length){
+    fs+=`<tr class="tr-section"><td colspan="7" style="padding:8px 14px">الأسهم والصناديق — ${(retS>=0?'+':'')+retS.toFixed(2)}%</td></tr>`;
+    Object.entries(h).forEach(([sym,v])=>{const cp=getStockPrice(sym)||v.avgPrice,cv=v.qty*cp,pnl=cv-v.totalCost,ret=v.totalCost?pnl/v.totalCost*100:0;fs+=`<tr><td style="padding-right:28px;font-weight:700;color:var(--blue)">${sym} — ${v.name}</td><td class="td-num" style="direction:ltr">${fmt(v.totalCost)}</td><td class="td-num" style="direction:ltr;font-weight:700">${fmt(cv)}</td><td class="td-num ${cls(pnl)}" style="direction:ltr">${sign(pnl)}${fmt(pnl)}</td><td class="td-num ${cls(ret)}" style="direction:ltr">${sign(ret)}${ret.toFixed(2)}%</td><td style="text-align:center">${pct(cv,stocksVal)}</td><td style="text-align:center">${pct(cv,grand)}</td></tr>`;});
+    fs+=`<tr class="fs-subtotal"><td>المجموع — أسهم</td><td class="td-num" style="direction:ltr">${fmt(stocksCost)}</td><td class="td-num" style="direction:ltr">${fmt(stocksVal)}</td><td class="td-num ${cls(pnlStocks)}" style="direction:ltr">${sign(pnlStocks)}${fmt(pnlStocks)}</td><td class="td-num ${cls(retS)}" style="direction:ltr">${sign(retS)}${retS.toFixed(2)}%</td><td style="text-align:center">100%</td><td style="text-align:center;font-weight:800">${pct(stocksVal,grand)}</td></tr>`;
+  }
+  if(Object.keys(mh).length){
+    const retM2=metalsCost>0?pnlMetals/metalsCost*100:0;
+    fs+=`<tr class="tr-section"><td colspan="7" style="padding:8px 14px">المعادن الثمينة — ${(retM2>=0?'+':'')+retM2.toFixed(2)}%</td></tr>`;
+    Object.entries(mh).forEach(([t,v])=>{const bt=v.metal_type||t.split('|')[0];const cp=getMetalPrice(bt)||v.avgPrice,cv=v.weight*cp,pnl=cv-v.totalCost,ret=v.totalCost?pnl/v.totalCost*100:0;fs+=`<tr><td style="padding-right:28px;font-weight:700;color:var(--gold)">${v.title?v.metal_type+' — '+v.title:bt}</td><td class="td-num" style="direction:ltr">${fmt(v.totalCost)}</td><td class="td-num" style="direction:ltr;font-weight:700">${fmt(cv)}</td><td class="td-num ${cls(pnl)}" style="direction:ltr">${sign(pnl)}${fmt(pnl)}</td><td class="td-num ${cls(ret)}" style="direction:ltr">${sign(ret)}${ret.toFixed(2)}%</td><td style="text-align:center">${pct(cv,metalsVal)}</td><td style="text-align:center">${pct(cv,grand)}</td></tr>`;});
+    fs+=`<tr class="fs-subtotal"><td>المجموع — معادن</td><td class="td-num" style="direction:ltr">${fmt(metalsCost)}</td><td class="td-num" style="direction:ltr">${fmt(metalsVal)}</td><td class="td-num ${cls(pnlMetals)}" style="direction:ltr">${sign(pnlMetals)}${fmt(pnlMetals)}</td><td class="td-num ${cls(retM2)}" style="direction:ltr">${sign(retM2)}${retM2.toFixed(2)}%</td><td style="text-align:center">100%</td><td style="text-align:center;font-weight:800">${pct(metalsVal,grand)}</td></tr>`;
+  }
+  if(DB.certs.length){
+    fs+=`<tr class="tr-section"><td colspan="7" style="padding:8px 14px">الشهادات الادخارية — مُصرَّف في الفترة: ${fmt(certsPaid)}</td></tr>`;
+    DB.certs.forEach(c=>{const rc=N2(c.amount)>0?N2(c.interest_paid)/N2(c.amount)*100:0;fs+=`<tr><td style="padding-right:28px;font-weight:700;color:var(--purple)">${c.name}${c.bank_name?' — '+c.bank_name:''}</td><td class="td-num" style="direction:ltr">${fmt(c.amount)}</td><td class="td-num" style="direction:ltr;font-weight:700">${fmt(N2(c.amount)+N2(c.interest_paid))}</td><td class="td-num ${N2(c.interest_paid)>0?'pos':''}" style="direction:ltr">${N2(c.interest_paid)>0?'+'+fmt(c.interest_paid):'—'}</td><td class="td-num ${rc>0?'pos':''}" style="direction:ltr">${rc>0?rc.toFixed(2)+'%':'—'}</td><td style="text-align:center">${pct(N2(c.amount),certsTotal)}</td><td style="text-align:center">${pct(N2(c.amount),grand)}</td></tr>`;});
+    fs+=`<tr class="fs-subtotal"><td>المجموع — شهادات</td><td class="td-num" style="direction:ltr">${fmt(certsTotal)}</td><td class="td-num" style="direction:ltr">${fmt(certsTotal+certsPaid)}</td><td class="td-num pos" style="direction:ltr">+${fmt(certsPaid)}</td><td>—</td><td style="text-align:center">100%</td><td style="text-align:center;font-weight:800">${pct(certsTotal,grand)}</td></tr>`;
+  }
+  if(DB.debts.length){
+    fs+=`<tr class="tr-section"><td colspan="7" style="padding:8px 14px">الديون والالتزامات</td></tr>`;
+    DB.debts.forEach(d=>{const io=d.type==='دين علي';fs+=`<tr><td style="padding-right:28px;font-weight:700;color:${io?'var(--red)':'var(--green)'}">${d.name}${d.party?' — '+d.party:''}</td><td class="td-num" style="direction:ltr">${fmt(d.amount)}</td><td class="td-num ${io?'neg':'pos'}" style="direction:ltr;font-weight:700">${io?'-':'+'}${fmt(d.remaining)}</td><td>—</td><td>—</td><td>—</td><td>—</td></tr>`;});
+    fs+=`<tr class="fs-subtotal"><td>صافي الديون</td><td>—</td><td class="td-num ${cls(debtsOwing-debtsOwed)}" style="direction:ltr">${sign(debtsOwing-debtsOwed)}${fmt(Math.abs(debtsOwing-debtsOwed))}</td><td colspan="4"></td></tr>`;
+  }
+  fs+=`<tr class="fs-grand"><td>صافي الثروة — ${periodLabel}</td><td class="td-num" style="direction:ltr;font-size:13px">${fmt(invested+totalBanks)}</td><td class="td-num" style="direction:ltr;font-size:14px;font-weight:900">${fmt(grand-debtsOwed)}</td><td class="td-num ${cls(totalPnl)}" style="direction:ltr">${sign(totalPnl)}${fmt(totalPnl)}</td><td class="td-num ${cls(roi)}" style="direction:ltr">${sign(roi)}${roi.toFixed(2)}%</td><td colspan="2" style="text-align:center;color:var(--muted);font-size:11px">الفترة: ${periodLabel}</td></tr>`;
+  document.getElementById('r-detail-tbody').innerHTML=fs;
+  const realizedTotal=divTotal+certsPaid+realizedStockPnl;
+  const unrealizedTotal=pnlStocks+pnlMetals;
+  const netIncome=realizedTotal+unrealizedTotal;
+  const incRow=(label,val,indent=false,bold=false)=>`<tr class="${bold?'fs-subtotal':''}"><td style="${indent?'padding-right:28px':'font-weight:700'}">${label}</td><td class="td-num ${cls(val)}" style="direction:ltr;${bold?'font-weight:800':''}">${sign(val)}${fmt(Math.abs(val))}</td></tr>`;
+  let inc='<tr class="tr-section"><td colspan="2" style="padding:8px 14px">الدخل المحقق (Realized)</td></tr>';
+  inc+=incRow('توزيعات أرباح الأسهم المستلمة',divTotal,true);
+  inc+=incRow('عوائد الشهادات الادخارية المصروفة',certsPaid,true);
+  inc+=incRow('أرباح/خسائر محققة من بيع الأسهم',realizedStockPnl,true);
+  inc+=incRow('إجمالي الدخل المحقق',realizedTotal,false,true);
+  inc+='<tr class="tr-section"><td colspan="2" style="padding:8px 14px">التغير في القيمة السوقية (غير محقق)</td></tr>';
+  inc+=incRow('أرباح/خسائر غير محققة — الأسهم',pnlStocks,true);
+  inc+=incRow('أرباح/خسائر غير محققة — المعادن',pnlMetals,true);
+  inc+=incRow('إجمالي التغير غير المحقق',unrealizedTotal,false,true);
+  inc+=`<tr class="fs-grand"><td>صافي الدخل الإجمالي — ${periodLabel}</td><td class="td-num ${cls(netIncome)}" style="direction:ltr;font-size:14px;font-weight:900">${sign(netIncome)}${fmt(Math.abs(netIncome))}</td></tr>`;
+  document.getElementById('r-income-tbody').innerHTML=inc;
+  const netCashFlow=cashIn-cashOut;
+  const bTxnsForCF=DB.bankTxns.filter(t=>t.date>=pStart&&t.date<=pEnd);
+  const CREDIT_TYPES=['إيداع','تحويل وارد','رصيد افتتاحي','عائد شهادة','أرباح'];
+  const inflowByCat={},outflowByCat={};
+  bTxnsForCF.forEach(t=>{
+    const bucket=CREDIT_TYPES.includes(t.type)?inflowByCat:outflowByCat;
+    bucket[t.type]=(bucket[t.type]||0)+N2(t.amount);
+  });
+  const catRow=(label,val)=>`<tr><td style="padding-right:28px;color:var(--muted);font-size:12px">${label}</td><td class="td-num" style="direction:ltr;font-size:12px">${fmt(val)}</td></tr>`;
+  let cf=`<tr class="tr-section" style="background:var(--green-l)"><td colspan="2" style="padding:9px 14px;color:var(--green);font-weight:800">↓ التدفقات الداخلة</td></tr>`;
+  cf+=Object.keys(inflowByCat).length?Object.entries(inflowByCat).sort((a,b)=>b[1]-a[1]).map(([t,v])=>catRow(t,v)).join(''):catRow('لا توجد حركات داخلة في هذه الفترة',0);
+  cf+=incRow('إجمالي التدفقات الداخلة',cashIn,false,true);
+  cf+=`<tr class="tr-section" style="background:var(--red-l)"><td colspan="2" style="padding:9px 14px;color:var(--red);font-weight:800">↑ التدفقات الخارجة</td></tr>`;
+  cf+=Object.keys(outflowByCat).length?Object.entries(outflowByCat).sort((a,b)=>b[1]-a[1]).map(([t,v])=>catRow(t,v)).join(''):catRow('لا توجد حركات خارجة في هذه الفترة',0);
+  cf+=incRow('إجمالي التدفقات الخارجة',-cashOut,false,true);
+  cf+=`<tr class="fs-grand"><td>صافي التدفق النقدي — ${periodLabel}</td><td class="td-num ${cls(netCashFlow)}" style="direction:ltr;font-size:14px;font-weight:900">${sign(netCashFlow)}${fmt(Math.abs(netCashFlow))}</td></tr>`;
+  cf+=`<tr><td style="color:var(--muted);font-size:11px;padding-top:10px">رصيد البنوك الحالي (كل الحسابات)</td><td class="td-num" style="direction:ltr;color:var(--muted);font-size:11px">${fmt(totalBanks)}</td></tr>`;
+  document.getElementById('r-cashflow-tbody').innerHTML=cf;
+  if(typeof updateReportCurrencyCard==='function')updateReportCurrencyCard();
+  setTimeout(()=>renderReportCharts(PT),60);
+}
+function renderReportCharts(PT){
+  const{h,mh,grand,totalBanks,stocksVal,metalsVal,certsTotal,pnlStocks,pnlMetals,certsPaid,divTotal,realizedStockPnl}=PT;
+  const{pStart:rStart,pEnd:rEnd}=getReportPeriodBounds();
+  const pd=[{l:'البنوك',v:totalBanks,c:'#1a56db'},{l:'الأسهم',v:stocksVal,c:'#0d9488'},{l:'المعادن',v:metalsVal,c:'#d97706'},{l:'الشهادات',v:certsTotal,c:'#7c3aed'}].filter(d=>d.v>0);
+  if(pd.length)mkPie('r-pie',pd.map(d=>d.l),pd.map(d=>d.v),pd.map(d=>d.c));
+  const pi=[{l:'أسهم (غير محقق)',v:pnlStocks},{l:'معادن (غير محقق)',v:pnlMetals},{l:'أسهم محقق',v:realizedStockPnl},{l:'شهادات مُصرَّفة',v:certsPaid},{l:'أرباح موزعة',v:divTotal}].filter(x=>Math.abs(x.v)>0.01);
+  if(pi.length)mkBar('r-pnl',pi.map(x=>x.l),[{label:'ر/خ',data:pi.map(x=>x.v),backgroundColor:pi.map(x=>x.v>=0?'rgba(13,148,136,.85)':'rgba(225,29,72,.85)'),borderRadius:8,borderSkipped:false}]);
+  const snaps=DB.snapshots.filter(s=>s.snapshot_date>=rStart&&s.snapshot_date<=rEnd);
+  if(snaps.length>1)mkLine('r-line',snaps.map(s=>{const d=new Date(s.snapshot_date);return d.toLocaleDateString('ar-EG',{month:'short',day:'numeric'})}),[
+    {label:'الإجمالي',data:snaps.map(s=>N2(s.grand_total)),borderColor:'#1a56db',backgroundColor:'rgba(26,86,219,.08)',fill:true,tension:.4,pointRadius:snaps.length<40?2:0,borderWidth:2},
+    {label:'البنوك',data:snaps.map(s=>N2(s.total_banks)),borderColor:'#0891b2',fill:false,tension:.4,pointRadius:0,borderWidth:1.5,borderDash:[4,4]},
+    {label:'الأسهم',data:snaps.map(s=>N2(s.total_stocks)),borderColor:'#0d9488',fill:false,tension:.4,pointRadius:0,borderWidth:1.5,borderDash:[4,4]},
+  ]);
+  if(Object.keys(h).length){
+    const ent=Object.entries(h);
+    const sv=ent.map(([s,v])=>{const cp=getStockPrice(s)||v.avgPrice;return+(v.qty*cp-v.totalCost).toFixed(2)});
+    if(sv.some(v=>Math.abs(v)>0.01))mkBar('r-stocks-pnl',ent.map(([s])=>s),[{label:'ر/خ',data:sv,backgroundColor:sv.map(v=>v>=0?'#0d9488':'#e11d48'),borderRadius:6}]);
+  }
+  if(Object.keys(mh).length){
+    const me=Object.entries(mh);
+    const mv=me.map(([t,v])=>{const bt=v.metal_type||t.split('|')[0];const cp=getMetalPrice(bt)||v.avgPrice;return+(v.weight*cp-v.totalCost).toFixed(2)});
+    if(mv.some(v=>Math.abs(v)>0.01))mkBar('r-metals-pnl',me.map(([t,v])=>v.title?v.metal_type+'—'+v.title:v.metal_type||t.split('|')[0]),[{label:'ر/خ',data:mv,backgroundColor:mv.map(v=>v>=0?'#d97706':'#e11d48'),borderRadius:6}]);
+  }
+  if(DB.certs.length){
+    const sorted=[...DB.certs].sort((a,b)=>a.maturity_date>b.maturity_date?1:-1);
+    destroyChart('r-certs');const cv=document.getElementById('r-certs');
+    if(cv)CHARTS['r-certs']=new Chart(cv,{type:'bar',data:{labels:sorted.map(c=>c.name),datasets:[{label:'الأصل',data:sorted.map(c=>N2(c.amount)),backgroundColor:'#7c3aed',borderRadius:4,stack:'s'},{label:'مُصرَّف',data:sorted.map(c=>N2(c.interest_paid)),backgroundColor:'#0d9488',borderRadius:4,stack:'s'},{label:'متبقي',data:sorted.map(c=>Math.max(0,N2(c.total_interest)-N2(c.interest_paid))),backgroundColor:'rgba(124,58,237,.25)',borderRadius:4,stack:'s'}]},options:{indexAxis:'y',responsive:true,maintainAspectRatio:true,plugins:{legend:{labels:{color:tc(),font:{family:'Cairo',size:11}}}},scales:{x:{stacked:true,grid:{color:gc()},ticks:{color:tc(),font:{family:'Cairo',size:10},callback:v=>Math.abs(v)>=1e6?(v/1e6).toFixed(1)+'M':Math.abs(v)>=1e3?(v/1e3).toFixed(0)+'K':v}},y:{stacked:true,grid:{display:false},ticks:{color:tc(),font:{family:'Cairo',size:10}}}}}});
+  }
+  const bd=DB.banks.filter(b=>b.is_active!==false&&toEGP(N2(b.balance),b.currency||'EGP')>0);
+  if(bd.length)mkPie('r-banks',bd.map(b=>b.name),bd.map(b=>toEGP(N2(b.balance),b.currency||'EGP')),bd.map(b=>getBankColor(b.id)));
+  const months=[],deps=[],withs=[];
+  const ep=UI.globalPeriod||'1y';
+  let dateList=[];
+  if(ep==='custom'&&UI.customFrom&&UI.customTo){
+    const s=new Date(UI.customFrom),e=new Date(UI.customTo);
+    const c=new Date(s.getFullYear(),s.getMonth(),1);
+    while(c<=e){dateList.push(new Date(c));c.setMonth(c.getMonth()+1);}
+  }else{
+    const mb=ep==='3m'?3:ep==='6m'?6:ep==='1y'?12:ep==='2y'?24:ep==='5y'?60:120;
+    for(let j=mb-1;j>=0;j--){const d=new Date();d.setMonth(d.getMonth()-j);if(d.toISOString().slice(0,7)>=rStart.slice(0,7))dateList.push(new Date(d));}
+  }
+  const CREDIT=['إيداع','تحويل وارد','عائد شهادة','أرباح'];
+  dateList.forEach(d=>{
+    const ym=d.getFullYear()+'-'+(d.getMonth()+1).toString().padStart(2,'0');
+    months.push(new Intl.DateTimeFormat('ar-EG',{month:'short',year:'2-digit'}).format(d));
+    const mt=DB.bankTxns.filter(t=>t.date&&t.date.startsWith(ym));
+    deps.push(mt.filter(t=>CREDIT.includes(t.type)).reduce((a,t)=>a+N2(t.amount),0));
+    withs.push(mt.filter(t=>!CREDIT.includes(t.type)).reduce((a,t)=>a+N2(t.amount),0));
+  });
+  if(months.length)mkBar('r-activity',months,[{label:'واردات',data:deps,backgroundColor:'rgba(13,148,136,.85)',borderRadius:6,borderSkipped:false},{label:'صادرات',data:withs,backgroundColor:'rgba(225,29,72,.85)',borderRadius:6,borderSkipped:false}]);
+}
+function updateReportCurrencyCard(){
+  const sel=document.getElementById('r-currency-sel');
+  if(!sel)return;
+  const toCur=sel.value||'EGP';
+  const T=calcTotals();
+  const knownCurs=['EGP','USD','EUR','GBP','SAR','AED'];
+  const extraCurs=DB.exchangeRates.filter(r=>!knownCurs.includes(r.currency));
+  if(extraCurs.length){
+    extraCurs.forEach(r=>{
+      if(!sel.querySelector(`option[value="${r.currency}"]`)){
+        const opt=document.createElement('option');opt.value=r.currency;opt.textContent=r.currency;sel.appendChild(opt);
+      }
+    });
+  }
+  const egpToTarget=(egpAmt)=>{
+    if(toCur==='EGP')return egpAmt;
+    const rate=getRate(toCur);
+    return rate>0?egpAmt/rate:egpAmt;
+  };
+  const fmtCur=(v)=>new Intl.NumberFormat('ar-EG',{minimumFractionDigits:2,maximumFractionDigits:2}).format(v)+' '+toCur;
+  const categories=[
+    {label:'إجمالي المحفظة',val:T.grand,color:'var(--blue)'},
+    {label:'الأرصدة البنكية',val:T.totalBanks,color:'var(--teal)'},
+    {label:'الأسهم',val:T.stocksVal,color:'var(--green)'},
+    {label:'المعادن',val:T.metalsVal,color:'var(--gold)'},
+    {label:'الشهادات',val:T.certsTotal,color:'var(--purple)'},
+  ];
+  const grid=document.getElementById('r-currency-grid');
+  if(!grid)return;
+  const rate=toCur==='EGP'?1:getRate(toCur);
+  const rateDisplay=toCur!=='EGP'?`<div style="font-size:10px;color:var(--muted);margin-top:8px;padding:6px;background:var(--surface2);border-radius:6px">سعر الصرف: 1 ${toCur} = ${fmtN(rate,4)} ج.م</div>`:'';
+  grid.innerHTML=categories.map(c=>{
+    const converted=egpToTarget(c.val);
+    const pct=T.grand>0?c.val/T.grand*100:0;
+    return`<div style="padding:14px;border-radius:10px;border:.5px solid var(--border);background:var(--surface2);text-align:center">
+      <div style="font-size:10px;color:var(--muted);font-weight:700;text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px">${c.label}</div>
+      <div style="font-size:20px;font-weight:900;color:${c.color};letter-spacing:-.5px">${fmtN(converted,2)}</div>
+      <div style="font-size:11px;color:var(--muted);margin-top:2px">${toCur}</div>
+      ${c.label!=='إجمالي المحفظة'?`<div style="font-size:10px;color:var(--muted);margin-top:4px">${pct.toFixed(1)}% من المحفظة</div>`:''}
+    </div>`;
+  }).join('')+rateDisplay;
+}
+
+// ═══════════════════════════════════════════════════
+//  PDF EXPORT / DARK MODE / BACKUP / TOAST
+// ═══════════════════════════════════════════════════
+async function exportPDF(){
+  try{
+    renderReports();
+    const T=calcTotals();
+    const {pStart,pEnd}=getReportPeriodBounds();
+    const title=(APP_SETTINGS.exchange_name||'تقرير المحفظة المالية');
+    const cur=baseCur();
+    const table=(head,rows)=>`<table><thead><tr>${head.map(h=>`<th>${h}</th>`).join('')}</tr></thead><tbody>${rows||`<tr><td colspan="${head.length}" class="c">لا توجد بيانات</td></tr>`}</tbody></table>`;
+    const sec=(t,inner)=>`<section><h2>${t}</h2>${inner}</section>`;
+    const kv=(k,v,cls='')=>`<tr><td>${k}</td><td class="n ${cls}">${v}</td></tr>`;
+    const summary=table(['البند','القيمة ('+cur+')'],
+      kv('إجمالي الثروة',fmt(T.grand),'b')+kv('الحسابات البنكية والنقد',fmt(T.totalBanks))+kv('الأسهم والصناديق',fmt(T.stocksVal))+
+      kv('المعادن الثمينة',fmt(T.metalsVal))+kv('الشهادات الادخارية',fmt(T.certsTotal))+
+      kv('ديون لك',fmt(T.debtsOwing))+kv('ديون عليك',fmt(-T.debtsOwed),'neg'));
+    const banks=table(['الحساب','النوع','العملة','الرصيد','المقابل ('+cur+')'],
+      DB.banks.filter(b=>b.is_active!==false).map(b=>`<tr><td>${b.name}</td><td>${b.type}</td><td>${b.currency||baseCur()}</td><td class="n">${fmtN(b.balance)}</td><td class="n">${fmt(toEGP(N2(b.balance),b.currency||'EGP'))}</td></tr>`).join(''));
+    const h=getHoldings();
+    const stocks=table(['الكود','الاسم','الكمية','متوسط التكلفة','السعر الحالي','القيمة','ر/خ'],
+      Object.entries(h).map(([s,v])=>{const cp=getStockPrice(s)||v.avgPrice,cv=v.qty*cp,pl=cv-v.totalCost;
+        return`<tr><td>${s}</td><td>${v.name}</td><td class="n">${fmtN(v.qty,4)}</td><td class="n">${fmtN(v.avgPrice,4)}</td><td class="n">${fmtN(cp,4)}</td><td class="n">${fmt(cv)}</td><td class="n ${pl>=0?'pos':'neg'}">${pl>=0?'+':''}${fmt(pl)}</td></tr>`;}).join(''));
+    const mh=getMetalHoldings();
+    const metals=table(['النوع','العنوان','الوزن (جم)','متوسط/جم','السعر الحالي/جم','القيمة','ر/خ'],
+      Object.entries(mh).filter(([,v])=>v.weight>0.001).map(([k,v])=>{const bt=(v.metal_type||k.split('|')[0]).trim(),cp=getMetalPrice(bt)||v.avgPrice,cv=v.weight*cp,pl=cv-v.totalCost;
+        return`<tr><td>${bt}</td><td>${v.title||'—'}</td><td class="n">${fmtN(v.weight,3)}</td><td class="n">${fmtN(v.avgPrice)}</td><td class="n">${fmtN(cp)}</td><td class="n">${fmt(cv)}</td><td class="n ${pl>=0?'pos':'neg'}">${pl>=0?'+':''}${fmt(pl)}</td></tr>`;}).join(''));
+    const certs=table(['الشهادة','البنك','المبلغ','الفائدة %','الإصدار','الاستحقاق','عائد مُصرف','إجمالي الفائدة'],
+      DB.certs.map(c=>`<tr><td>${c.name}</td><td>${c.bank_name||'—'}</td><td class="n">${fmt(c.amount)}</td><td class="n">${c.rate}%</td><td>${c.issued_date}</td><td>${c.maturity_date}</td><td class="n">${fmt(c.interest_paid)}</td><td class="n">${fmt(c.total_interest)}</td></tr>`).join(''));
+    const detail=`<table><thead><tr><th>البند</th><th>التكلفة</th><th>القيمة الحالية</th><th>ر/خ</th><th>عائد %</th><th>من الفئة</th><th>من المحفظة</th></tr></thead><tbody>${document.getElementById('r-detail-tbody').innerHTML}</tbody></table>`;
+    const income=`<table><tbody>${document.getElementById('r-income-tbody').innerHTML}</tbody></table>`;
+    const cashflow=`<table><tbody>${document.getElementById('r-cashflow-tbody').innerHTML}</tbody></table>`;
+    const css=`
+      @page{size:A4;margin:14mm 12mm}
+      *{box-sizing:border-box}
+      body{font-family:'Segoe UI',Tahoma,'Noto Naskh Arabic',Arial,sans-serif;color:#111827;direction:rtl;font-size:11px;line-height:1.55;margin:0}
+      header{border-bottom:3px solid #1a56db;padding-bottom:10px;margin-bottom:14px;display:flex;justify-content:space-between;align-items:flex-end}
+      header h1{margin:0;font-size:22px;color:#1a56db}
+      header .meta{font-size:10.5px;color:#4b5563;text-align:left;direction:ltr}
+      section{margin-bottom:16px;break-inside:auto}
+      h2{font-size:13.5px;margin:0 0 6px;padding:5px 10px;background:#eff6ff;border-right:4px solid #1a56db;color:#1e3a8a;break-after:avoid}
+      table{width:100%;border-collapse:collapse;font-size:10.5px}
+      th{background:#f3f4f6;text-align:right;padding:5px 7px;border:1px solid #d1d5db;font-weight:800}
+      td{padding:4px 7px;border:1px solid #e5e7eb;vertical-align:top}
+      tr{break-inside:avoid}
+      .n,.td-num{text-align:left;direction:ltr;white-space:nowrap}
+      .c{text-align:center;color:#6b7280}
+      .b{font-weight:900}
+      .pos{color:#15803d}.neg{color:#b91c1c}
+      .tr-section td,.tr-section{background:#f9fafb;font-weight:800}
+      .fs-grand td{background:#eff6ff;font-weight:900;border-top:2px solid #1a56db}
+      .fs-subtotal td{font-weight:800;background:#f9fafb}
+      .badge{padding:1px 6px;border-radius:8px;background:#f3f4f6;font-size:9.5px}
+      footer{margin-top:10px;padding-top:6px;border-top:1px solid #d1d5db;font-size:9.5px;color:#6b7280;text-align:center}
+    `;
+    const doc=`<!doctype html><html lang="ar" dir="rtl"><head><meta charset="utf-8"><title>${title} — ${today()}</title><style>${css}</style></head><body>
+      <header><div><h1>${title}</h1><div style="color:#4b5563">تقرير مالي شامل — العملة الأساسية: ${cur}</div></div>
+      <div class="meta">Period: ${pStart} → ${pEnd}<br>Generated: ${new Date().toLocaleString('en-GB')}</div></header>
+      ${sec('١. ملخص المحفظة',summary)}
+      ${sec('٢. الحسابات البنكية',banks)}
+      ${sec('٣. القائمة المالية التفصيلية',detail)}
+      ${sec('٤. قائمة الدخل ('+pStart+' → '+pEnd+')',income)}
+      ${sec('٥. قائمة التدفقات النقدية ('+pStart+' → '+pEnd+')',cashflow)}
+      ${sec('٦. حيازات الأسهم والصناديق',stocks)}
+      ${sec('٧. المعادن الثمينة',metals)}
+      ${sec('٨. الشهادات الادخارية',certs)}
+      <footer>تم إنشاء هذا التقرير آليًا من نظام إدارة المحفظة — الأرقام حتى تاريخ ${today()}</footer>
+    </body></html>`;
+    const old=document.getElementById('print-frame');if(old)old.remove();
+    const fr=document.createElement('iframe');fr.id='print-frame';
+    fr.style.cssText='position:fixed;right:-9999px;bottom:0;width:0;height:0;border:0';
+    document.body.appendChild(fr);
+    fr.contentDocument.open();fr.contentDocument.write(doc);fr.contentDocument.close();
+    setTimeout(()=>{fr.contentWindow.focus();fr.contentWindow.print();},400);
+    toast('اختر "حفظ كـ PDF" من نافذة الطباعة');
+  }catch(e){console.error('exportPDF:',e);toast('خطأ في التصدير: '+e.message,false)}
+}
+function toggleDark(){
+  document.body.classList.toggle('dark');
+  const dk=document.body.classList.contains('dark');
+  document.querySelectorAll('select,input').forEach(s=>s.style.colorScheme=dk?'dark':'light');
+  localStorage.setItem('darkMode',dk?'1':'0');
+  const sunPath='<circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/>';
+  const moonPath='<path d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z"/>';
+  const iconPath=dk?sunPath:moonPath;
+  ['dark-icon','topbar-dark-icon'].forEach(id=>{const el=document.getElementById(id);if(el)el.innerHTML=iconPath});
+  const dt=document.getElementById('dark-text');if(dt)dt.textContent=dk?'نهاري':'ليلي';
+  setTimeout(()=>renderPage(),50);
+}
+function initDark(){
+  const savedDark=localStorage.getItem('darkMode')==='1';
+  if(savedDark){
+    document.body.classList.add('dark');
+    document.querySelectorAll('select,input').forEach(s=>s.style.colorScheme='dark');
+    const sunPath='<circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/>';
+    ['dark-icon','topbar-dark-icon'].forEach(id=>{const el=document.getElementById(id);if(el)el.innerHTML=sunPath});
+    const dt=document.getElementById('dark-text');if(dt)dt.textContent='نهاري';
+  }
+  const savedPeriod=localStorage.getItem('globalPeriod')||'1y';
+  UI.globalPeriod=savedPeriod;
+  const ps=document.getElementById('global-period-select');
+  if(ps)ps.value=savedPeriod;
+}
+async function exportBackup(){
+  try{
+    const tables=['banks','bank_transactions','stock_transactions','stock_prices','metal_transactions','metal_prices','certificates','dividends','recurring_transactions','financial_goals','exchange_rates','portfolio_snapshots','debts','debt_payments'];
+    const data={};for(const t of tables)data[t]=await sbGet(t,'?order=id');
+    const blob=new Blob([JSON.stringify(data,null,2)],{type:'application/json'});
+    const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='portfolio_backup_'+today()+'.json';a.click();
+    toast('تم تصدير النسخة الاحتياطية');
+  }catch(e){toast('خطأ: '+e.message,false)}
+}
+async function importBackup(input){
+  const file=input.files[0];if(!file)return;
+  try{
+    const text=await file.text(),data=JSON.parse(text);
+    if(!confirm('سيتم مسح البيانات الحالية. متابعة؟'))return;
+    const order=['financial_goals','recurring_transactions','dividends','debt_payments','debts','certificates','metal_transactions','stock_transactions','bank_transactions','exchange_rates','stock_prices','metal_prices','portfolio_snapshots','banks'];
+    for(const table of order){if(!data[table])continue;const ex=await sbGet(table,'?select=id');for(const row of ex)try{await sbDel(table,row.id)}catch(e){};if(data[table].length)await sbPost(table,data[table])}
+    toast('تم الاستيراد بنجاح');await loadAll();
+  }catch(e){toast('خطأ في الاستيراد: '+e.message,false)}
+  input.value='';
+}
+function toast(msg,ok=true){
+  const t=document.getElementById('toast');const icon=document.querySelector('.toast svg');
+  document.getElementById('toast-msg').textContent=msg;
+  t.className='toast show '+(ok?'ok':'err');
+  icon.innerHTML=ok?'<polyline points="20 6 9 17 4 12"/>':'<circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/>';
+  clearTimeout(t._to);t._to=setTimeout(()=>t.classList.remove('show'),3000);
+}
+
+// ═══════════════════════════════════════════════════
+//  INTEGRITY CHECK (بدون recompute الرصيد — trigger يتولاه)
+// ═══════════════════════════════════════════════════
+async function runIntegrityCheck(){
+  let fixed=0,log=[];
+  const bankTxnIds=new Set(DB.bankTxns.map(t=>t.id));
+  const bankIds=new Set(DB.banks.map(b=>b.id));
+  // 1. Stock txns: orphan bank_transaction_id
+  for(const t of DB.stockTxns){
+    if(t.bank_transaction_id&&!bankTxnIds.has(t.bank_transaction_id)){
+      try{await sbPatch('stock_transactions',t.id,{bank_transaction_id:null});fixed++;log.push('Stock txn #'+t.id+': cleared orphan bank_txn ref');}catch(e){}
+    }
+  }
+  // 2. Metal txns
+  for(const t of DB.metalTxns){
+    if(t.bank_transaction_id&&!bankTxnIds.has(t.bank_transaction_id)){
+      try{await sbPatch('metal_transactions',t.id,{bank_transaction_id:null});fixed++;log.push('Metal txn #'+t.id+': cleared orphan bank_txn ref');}catch(e){}
+    }
+  }
+  // 3. Certs
+  for(const c of DB.certs){
+    if(c.bank_transaction_id&&!bankTxnIds.has(c.bank_transaction_id)){
+      try{await sbPatch('certificates',c.id,{bank_transaction_id:null});fixed++;log.push('Cert #'+c.id+': cleared orphan bank_txn ref');}catch(e){}
+    }
+  }
+  // 4. Bank txns referencing non-existent banks
+  for(const t of DB.bankTxns.filter(t=>!bankIds.has(t.bank_id))){
+    try{await sbDel('bank_transactions',t.id);fixed++;log.push('BankTxn #'+t.id+': deleted (orphan bank)');}catch(e){}
+  }
+  // 5. linked_transfer_id consistency
+  for(const t of DB.bankTxns){
+    if(t.linked_transfer_id&&!bankTxnIds.has(t.linked_transfer_id)){
+      try{await sbPatch('bank_transactions',t.id,{linked_transfer_id:null});fixed++;log.push('BankTxn #'+t.id+': cleared orphan linked_transfer');}catch(e){}
+    }
+  }
+  // 6. Clean orphan stock_prices (no txns AND no holdings)
+  const usedSymbols=new Set(DB.stockTxns.map(t=>t.symbol));
+  for(const p of DB.stockPrices){
+    if(!usedSymbols.has(p.symbol)){
+      try{await api('stock_prices?symbol=eq.'+encodeURIComponent(p.symbol),'DELETE');fixed++;log.push('StockPrice '+p.symbol+': deleted (no txns)');}catch(e){}
+    }
+  }
+  // 7. Clean orphan metal_prices
+  const usedMetalTypes=new Set(DB.metalTxns.map(t=>(t.metal_type||'').split('|')[0].trim()));
+  for(const p of DB.metalPrices){
+    if(!usedMetalTypes.has(p.metal_type)){
+      try{await api('metal_prices?metal_type=eq.'+encodeURIComponent(p.metal_type),'DELETE');fixed++;log.push('MetalPrice '+p.metal_type+': deleted (no txns)');}catch(e){}
+    }
+  }
+  if(fixed>0){
+    console.log('[Integrity] Fixed '+fixed+' issues:',log);
+    await loadAll();
+  }else{
+    console.log('[Integrity] All checks passed');
+  }
+}
+
+// ═══════════════════════════════════════════════════
+//  SETTINGS
+// ═══════════════════════════════════════════════════
+let APP_SETTINGS={exchange_name:'',base_currency:'EGP',currencies:[{code:'EGP',name:'الجنيه المصري'},{code:'USD',name:'دولار أمريكي'},{code:'SAR',name:'ريال سعودي'},{code:'AED',name:'درهم إماراتي'},{code:'EUR',name:'يورو'},{code:'GBP',name:'جنيه إسترليني'}],goldapi_key:'',zakat:{start_date:null,gold_price:null,silver_price:null,include:{}}};
+let settingsBackend='local';
+const CURRENCY_LABELS={EGP:'الجنيه المصري',SAR:'ريال سعودي',AED:'درهم إماراتي',USD:'دولار أمريكي',EUR:'يورو',GBP:'جنيه إسترليني',KWD:'دينار كويتي',QAR:'ريال قطري',BHD:'دينار بحريني',OMR:'ريال عماني',JOD:'دينار أردني'};
+function normalizeCurrencies(){
+  APP_SETTINGS.currencies=(APP_SETTINGS.currencies||[]).map(c=>
+    typeof c==='string'?{code:c,name:CURRENCY_LABELS[c]||c}:{code:c.code,name:c.name||CURRENCY_LABELS[c.code]||c.code}
+  );
+}
+function currencyName(code){const c=APP_SETTINGS.currencies.find(x=>x.code===code);return c?c.name:(CURRENCY_LABELS[code]||code);}
+function currencyCodes(){return APP_SETTINGS.currencies.map(c=>c.code);}
+async function loadAppSettings(){
+  try{
+    const rows=await sbGet('app_settings','?limit=1');
+    if(rows&&rows.length&&rows[0].value){
+      APP_SETTINGS={...APP_SETTINGS,...rows[0].value,zakat:{...APP_SETTINGS.zakat,...(rows[0].value.zakat||{})}};
+      settingsBackend='supabase';
+    }else{
+      await sbPost('app_settings',[{value:APP_SETTINGS}]);
+      settingsBackend='supabase';
+    }
+    normalizeCurrencies();
+    return;
+  }catch(e){}
+  settingsBackend='local';
+  try{
+    const raw=localStorage.getItem('appSettings');
+    if(raw)APP_SETTINGS={...APP_SETTINGS,...JSON.parse(raw)};
+  }catch(e){}
+  normalizeCurrencies();
+}
+async function persistAppSettings(){
+  if(settingsBackend==='supabase'){
+    try{
+      const uid=authSession?.user?.id;
+      if(!uid){settingsBackend='local';}
+      else{
+        const rows=await sbGet('app_settings','?limit=1');
+        if(rows&&rows.length){
+          await sbPatchBy('app_settings','user_id=eq.'+uid,{value:APP_SETTINGS});
+        }else{
+          await sbPost('app_settings',[{value:APP_SETTINGS}]);
+        }
+        return;
+      }
+    }catch(e){
+      console.warn('persistAppSettings supabase failed, falling back to local:',e.message);
+      settingsBackend='local';
+    }
+  }
+  try{localStorage.setItem('appSettings',JSON.stringify(APP_SETTINGS));}catch(e){}
+}
+const METAL_TYPES_BY_CURRENCY={
+  EGP:['ذهب 24','ذهب 21','ذهب 18','جنيه ذهب','سبيكة ذهب','فضة'],
+  SAR:['ذهب 24 قيراط','ذهب 22 قيراط','ذهب 21 قيراط','ذهب 18 قيراط','سبيكة ذهب','فضة'],
+  AED:['ذهب 24 قيراط','ذهب 22 قيراط','ذهب 21 قيراط','ذهب 18 قيراط','سبيكة ذهب','فضة'],
+  DEFAULT:['ذهب 24 قيراط','ذهب 22 قيراط','ذهب 21 قيراط','ذهب 18 قيراط','سبيكة ذهب','فضة']
+};
+function getMetalTypeList(){return METAL_TYPES_BY_CURRENCY[baseCur()]||METAL_TYPES_BY_CURRENCY.DEFAULT;}
+function populateMetalTypeSelect(presetValue){
+  const sel=document.getElementById('emb-metal-type');if(!sel)return;
+  const list=getMetalTypeList();
+  const cur=presetValue||sel.value;
+  sel.innerHTML=list.map(t=>`<option>${t}</option>`).join('')+'<option value="__custom__">أخرى (تحديد يدوي)</option>';
+  if(cur&&list.includes(cur))sel.value=cur;
+  else if(cur){
+    sel.insertAdjacentHTML('beforeend',`<option value="${cur}" selected>${cur}</option>`);
+  }
+  onMetalTypeChange();
+}
+function onMetalTypeChange(){
+  const sel=document.getElementById('emb-metal-type');
+  const customEl=document.getElementById('emb-metal-custom');
+  if(!sel||!customEl)return;
+  customEl.classList.toggle('hidden',sel.value!=='__custom__');
+  updateMetalBuyPreview();
+}
+function populateCurrencySelect(id){
+  const sel=document.getElementById(id);
+  if(!sel)return;
+  const cur=sel.value;
+  const codes=currencyCodes();
+  sel.innerHTML=APP_SETTINGS.currencies.map(c=>`<option value="${c.code}">${c.code} - ${c.name}</option>`).join('');
+  if(cur&&codes.includes(cur))sel.value=cur;
+  else if(codes.includes(baseCur()))sel.value=baseCur();
+}
+function populateAllCurrencySelects(){
+  populateCurrencySelect('ebuy-currency');
+  populateCurrencySelect('eb-currency');
+  populateCurrencySelect('ecert-currency');
+  populateCurrencySelect('emb-currency');
+}
+function updateCurrencyLabels(){
+  document.querySelectorAll('.cur-unit').forEach(el=>el.textContent=baseCur());
+}
+function renderSettings(){
+  const nameEl=document.getElementById('st-exchange-name');if(nameEl)nameEl.value=APP_SETTINGS.exchange_name||'';
+  const goldKeyEl=document.getElementById('st-goldapi-key');if(goldKeyEl)goldKeyEl.value=APP_SETTINGS.goldapi_key||'';
+  const baseSel=document.getElementById('st-base-currency');
+  if(baseSel){
+    baseSel.innerHTML=APP_SETTINGS.currencies.map(c=>`<option value="${c.code}">${c.code} - ${c.name}</option>`).join('');
+    baseSel.value=baseCur();
+  }
+  const listEl=document.getElementById('st-currencies-list');
+  if(listEl)listEl.innerHTML=APP_SETTINGS.currencies.map(c=>
+    `<span class="badge badge-blue" style="display:inline-flex;align-items:center;gap:6px;padding:5px 10px;font-size:11.5px">
+      <strong>${c.code}</strong> - <span contenteditable="true" spellcheck="false" style="outline:none;border-bottom:1px dashed currentColor" onblur="renameSettingsCurrency('${c.code}',this.textContent)">${c.name}</span>
+      ${c.code!==baseCur()?`<span style="cursor:pointer;font-weight:900" onclick="removeSettingsCurrency('${c.code}')" title="حذف">×</span>`:''}
+    </span>`
+  ).join('');
+  const modeEl=document.getElementById('st-storage-mode');
+  if(modeEl)modeEl.innerHTML=settingsBackend==='supabase'
+    ?'<span style="color:var(--green)">✓ الإعدادات متزامنة عبر قاعدة البيانات على كل أجهزتك</span>'
+    :'<span style="color:var(--gold)">⚠ الإعدادات محفوظة على هذا الجهاز فقط. تأكد من تشغيل schema.sql.</span>';
+  renderSchemaAlert();
+}
+const COLUMN_TYPE_HINTS={currency:'text',market:'text',price_currency:'text'};
+function renderSchemaAlert(){
+  const el=document.getElementById('st-live-schema-alert');if(!el)return;
+  const warnings=window.__schemaWarnings?[...window.__schemaWarnings]:[];
+  if(!warnings.length){el.innerHTML='<span style="color:var(--green)">✓ لا توجد تنبيهات — قاعدة البيانات متوافقة مع كل ميزات التطبيق الحالية.</span>';return;}
+  const alterLines=warnings.map(w=>{
+    const[table,col]=w.split('.');
+    return`ALTER TABLE ${table} ADD COLUMN IF NOT EXISTS ${col} ${COLUMN_TYPE_HINTS[col]||'text'};`;
+  });
+  el.innerHTML=`
+    <div style="color:var(--red);font-weight:800;margin-bottom:6px">⚠ قاعدة بياناتك ناقصة ${warnings.length} عمود:</div>
+    <ul style="margin:0 0 8px 18px;padding:0">${warnings.map(w=>`<li><code>${w}</code></li>`).join('')}</ul>
+    <code style="font-size:10.5px;display:block;background:var(--surface2);padding:8px;border-radius:6px;direction:ltr;text-align:left;white-space:pre-line">${alterLines.join('\n')}</code>`;
+}
+async function saveGeneralSettings(){
+  const oldBase=baseCur();
+  APP_SETTINGS.exchange_name=document.getElementById('st-exchange-name').value.trim();
+  const newBase=document.getElementById('st-base-currency').value||'EGP';
+  APP_SETTINGS.base_currency=newBase;
+  await persistAppSettings();
+  updateCurrencyLabels();
+  populateAllCurrencySelects();
+  if(newBase!==oldBase){
+    toast('تم تغيير العملة الأساسية — جاري تحديث كل الأرقام...');
+    await loadAll();
+  }else{
+    toast('تم الحفظ');
+  }
+}
+function addSettingsCurrency(){
+  const code=document.getElementById('st-new-currency-code').value.trim().toUpperCase();
+  const name=document.getElementById('st-new-currency-name').value.trim();
+  if(!code||code.length<3)return alert('أدخل كود عملة صحيح (3 أحرف مثل USD)');
+  if(!name)return alert('أدخل اسم العملة');
+  if(currencyCodes().includes(code))return alert('العملة موجودة بالفعل');
+  APP_SETTINGS.currencies.push({code,name});
+  document.getElementById('st-new-currency-code').value='';
+  document.getElementById('st-new-currency-name').value='';
+  persistAppSettings();renderSettings();populateAllCurrencySelects();
+  toast('تمت الإضافة');
+}
+function renameSettingsCurrency(code,newName){
+  newName=(newName||'').trim();
+  const entry=APP_SETTINGS.currencies.find(c=>c.code===code);
+  if(!entry||!newName||entry.name===newName)return;
+  entry.name=newName;
+  persistAppSettings();populateAllCurrencySelects();
+}
+function removeSettingsCurrency(code){
+  if(code===baseCur())return alert('لا يمكن حذف العملة الأساسية الحالية');
+  if(!confirm('حذف عملة '+code+' من القائمة؟'))return;
+  APP_SETTINGS.currencies=APP_SETTINGS.currencies.filter(x=>x.code!==code);
+  persistAppSettings();renderSettings();populateAllCurrencySelects();
+}
+
+// ═══════════════════════════════════════════════════
+//  ZAKAT
+// ═══════════════════════════════════════════════════
+function getZakatItems(){
+  const T=calcTotals();
+  return [
+    {key:'banks',label:'أرصدة الحسابات البنكية والنقد',note:'نقود — تُزكّى كاملة',value:T.totalBanks,defaultInclude:true},
+    {key:'stocks',label:'الأسهم والصناديق',note:'عروض تجارة — بالقيمة السوقية وقت الوجوب',value:T.stocksVal,defaultInclude:true},
+    {key:'metals',label:'الذهب والفضة المُدَّخرة',note:'للادخار/الاستثمار (حلي الاستعمال الشخصي: يُراجَع فيه أهل العلم)',value:T.metalsVal,defaultInclude:true},
+    {key:'certs_principal',label:'أصل الشهادات الادخارية',note:'مال مُدَّخر — يُزكّى أصله',value:T.certsTotal,defaultInclude:true},
+    {key:'debts_owing',label:'ديون لك عند الغير',note:'تُزكّى إن كانت مرجوّة السداد',value:T.debtsOwing,defaultInclude:false},
+    {key:'debts_owed',label:'ديون عليك (الحالّة فقط)',note:'تُخصم إن كانت مستحقة الأداء',value:-T.debtsOwed,defaultInclude:true},
+  ];
+}
+const ymdLocal=d=>d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+function hijriParts(ds){
+  const p=new Intl.DateTimeFormat('en-u-ca-islamic-umalqura',{year:'numeric',month:'numeric',day:'numeric'}).formatToParts(new Date(ds+'T12:00:00'));
+  const g=t=>+String(p.find(x=>x.type===t).value).replace(/\D/g,'');
+  return{y:g('year'),m:g('month'),d:g('day')};
+}
+function hijriLabel(ds){
+  if(!ds)return '';
+  return new Intl.DateTimeFormat('ar-SA-u-ca-islamic-umalqura',{year:'numeric',month:'long',day:'numeric'}).format(new Date(ds+'T12:00:00'));
+}
+function addHijriYear(ds){
+  const hp=hijriParts(ds),start=new Date(ds+'T12:00:00');
+  for(let i=350;i<=360;i++){
+    const c=ymdLocal(new Date(start.getTime()+i*86400000)),p=hijriParts(c);
+    if(p.y===hp.y+1&&p.m===hp.m&&p.d===hp.d)return c;
+  }
+  return ymdLocal(new Date(start.getTime()+354*86400000));
+}
+function previewZakatHijri(){
+  const v=document.getElementById('zk-start-date').value,el=document.getElementById('zk-start-hijri');
+  if(el)el.textContent=v?'يوافق: '+hijriLabel(v):'';
+}
+function zakatGoldPrice24(){
+  const price=t=>{const p=DB.metalPrices.find(x=>x.metal_type===t);return p?N2(p.price_per_gram):0;};
+  return price('ذهب 24')||price('ذهب 24 قيراط')||(price('ذهب 21')?price('ذهب 21')*24/21:0)||(price('ذهب 21 قيراط')?price('ذهب 21 قيراط')*24/21:0)||(price('ذهب 18')?price('ذهب 18')*24/18:0)||0;
+}
+function autofillZakatPrices(){
+  const g=zakatGoldPrice24(),s=DB.metalPrices.find(x=>x.metal_type==='فضة');
+  if(g)document.getElementById('zk-gold-price').value=g.toFixed(2);
+  if(s)document.getElementById('zk-silver-price').value=N2(s.price_per_gram).toFixed(2);
+  if(!g&&!s)return alert('لا توجد أسعار ذهب/فضة في المحفظة — حدّثها من صفحة "تحديث الأسعار" أو أدخلها يدويًا');
+  saveZakatSettings();
+}
+function renderZakat(){
+  const z=APP_SETTINGS.zakat||{};
+  document.getElementById('zk-start-date').value=z.start_date||'';
+  document.getElementById('zk-gold-price').value=z.gold_price||'';
+  document.getElementById('zk-silver-price').value=z.silver_price||'';
+  document.getElementById('zk-basis').value=z.basis||'gold';
+  previewZakatHijri();
+  document.getElementById('zakat-breakdown-tbody').innerHTML=getZakatItems().map(it=>{
+    const included=z.include&&(it.key in z.include)?z.include[it.key]:it.defaultInclude;
+    return`<tr><td style="font-size:12px"><div style="font-weight:700">${it.label}</div><div style="font-size:10px;color:var(--muted)">${it.note}</div></td>
+      <td class="td-num" style="font-weight:700">${fmt(it.value)}</td>
+      <td><input type="checkbox" ${included?'checked':''} onchange="toggleZakatInclude('${it.key}',this.checked)" style="width:18px;height:18px;cursor:pointer"></td></tr>`;
+  }).join('');
+  computeAndRenderZakat();
+  renderZakatHistory();
+}
+function toggleZakatInclude(key,val){
+  APP_SETTINGS.zakat.include=APP_SETTINGS.zakat.include||{};
+  APP_SETTINGS.zakat.include[key]=val;
+  persistAppSettings();computeAndRenderZakat();
+}
+function saveZakatSettings(){
+  const z=APP_SETTINGS.zakat=APP_SETTINGS.zakat||{};
+  z.start_date=document.getElementById('zk-start-date').value||null;
+  z.gold_price=N2(document.getElementById('zk-gold-price').value)||null;
+  z.silver_price=N2(document.getElementById('zk-silver-price').value)||null;
+  z.basis=document.getElementById('zk-basis').value||'gold';
+  persistAppSettings();toast('تم الحفظ');previewZakatHijri();computeAndRenderZakat();
+}
+function zakatState(){
+  const z=APP_SETTINGS.zakat||{};
+  const base=getZakatItems().reduce((a,it)=>a+((z.include&&(it.key in z.include)?z.include[it.key]:it.defaultInclude)?it.value:0),0);
+  const nisabGold=z.gold_price?85*N2(z.gold_price):null,nisabSilver=z.silver_price?595*N2(z.silver_price):null;
+  const basis=z.basis==='silver'?'silver':'gold';
+  const nisab=basis==='silver'?nisabSilver:nisabGold;
+  const nisabLabel=basis==='silver'?'595 جم فضة خالصة':'85 جم ذهب عيار 24';
+  let hawl=null;
+  if(z.start_date){
+    const end=addHijriYear(z.start_date),now=today();
+    const total=(new Date(end)-new Date(z.start_date))/86400000;
+    const elapsed=(new Date(now)-new Date(z.start_date))/86400000;
+    hawl={start:z.start_date,end,complete:now>=end,daysLeft:Math.ceil((new Date(end)-new Date(now))/86400000),pct:Math.max(0,Math.min(100,elapsed/total*100))};
+  }
+  const meets=nisab!==null&&base>=nisab;
+  return{z,base,nisab,nisabLabel,hawl,meets,due:base>0?base*0.025:0,isDue:meets&&!!hawl&&hawl.complete};
+}
+function computeAndRenderZakat(){
+  const S=zakatState(),{base,nisab,nisabLabel,hawl,meets,due,isDue}=S;
+  document.getElementById('zakat-kpis').innerHTML=
+    kpi('الوعاء الزكوي',fmt(base),'صافي الأموال بعد الديون','var(--teal)',svgIcon('<path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/>'),null)+
+    kpi('النصاب',nisab?fmt(nisab):'—',nisab?nisabLabel:'أدخل سعر الذهب','var(--gold)',svgIcon('<circle cx="12" cy="12" r="10"/>'),null)+
+    kpi('الزكاة (٢٫٥٪)',fmt(due),meets?(isDue?'مستحقة الآن':'بلغ النصاب — بانتظار الحول'):'لم يبلغ النصاب',isDue?'var(--green)':'var(--muted)',svgIcon('<line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6"/>'),null);
+  const hp=document.getElementById('zk-hawl-panel');
+  hp.innerHTML=hawl?`
+    <div style="display:flex;justify-content:space-between;flex-wrap:wrap;gap:8px;font-size:12px;margin-bottom:8px">
+      <div><span style="color:var(--muted)">بداية الحول:</span> <strong>${hawl.start}</strong> <span style="color:var(--muted)">(${hijriLabel(hawl.start)})</span></div>
+      <div><span style="color:var(--muted)">نهاية الحول:</span> <strong>${hawl.end}</strong> <span style="color:var(--muted)">(${hijriLabel(hawl.end)})</span></div>
+    </div>
+    <div class="prog-wrap lg"><div class="prog-bar" style="width:${hawl.pct}%;background:${hawl.complete?'var(--green)':'var(--gold)'}"></div></div>
+    <div style="margin-top:8px;font-size:12px;font-weight:700;color:${hawl.complete?'var(--green)':'var(--gold)'}">${hawl.complete?'✓ اكتمل الحول':'متبقٍ '+hawl.daysLeft+' يوم على اكتمال الحول'}</div>
+    <div class="form-hint">التقويم الهجري هنا (أم القرى) قد يختلف يومًا واحدًا عن رؤية الهلال في بلدك.</div>`
+    :`<div style="color:var(--muted);font-size:12px">حدّد تاريخ بداية الحول (أول يوم بلغ فيه مالك النصاب) لحساب موعد الاستحقاق هجريًا بدقة.</div>`;
+  document.getElementById('zakat-result').innerHTML=!nisab
+    ?`<div style="padding:20px;text-align:center;color:var(--muted)">أدخل سعر الذهب (أو استخدم "تعبئة الأسعار") لحساب النصاب.</div>`
+    :isDue?`<div style="text-align:center;padding:14px">
+        <div style="font-size:13px;color:var(--muted)">الزكاة المستحقة</div>
+        <div style="font-size:32px;font-weight:900;color:var(--green)">${fmt(due)}</div>
+        <div style="font-size:12px;color:var(--muted);margin-top:4px">٢٫٥٪ من ${fmt(base)} — بلغ النصاب (${fmt(nisab)}) واكتمل الحول</div>
+        <button class="btn btn-success" style="margin-top:14px" onclick="openZakatPay()">تسجيل إخراج الزكاة</button>
+      </div>`
+    :`<div style="text-align:center;padding:14px;color:var(--muted);font-size:13px">${!meets?'الوعاء ('+fmt(base)+') لم يبلغ النصاب ('+fmt(nisab)+') — لا زكاة حاليًا.':(hawl?'بلغ الوعاء النصاب، والزكاة تجب عند اكتمال الحول ('+hawl.end+').':'بلغ الوعاء النصاب — حدّد تاريخ بداية الحول.')}</div>`;
+}
+function renderZakatHistory(){
+  const h=(APP_SETTINGS.zakat&&APP_SETTINGS.zakat.history)||[];
+  document.getElementById('zakat-history-tbody').innerHTML=h.length?[...h].reverse().map((r,i)=>`<tr>
+    <td>${r.date}</td><td class="muted">${hijriLabel(r.date)}</td><td class="td-num pos" style="font-weight:800">${fmt(r.amount)}</td>
+    <td class="td-num muted">${fmt(r.base)}</td><td>${r.bank_name||'—'}</td>
+    <td><button class="btn-icon danger" onclick="deleteZakatRecord(${h.length-1-i})" title="حذف من السجل فقط"><svg viewBox="0 0 24 24"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a1 1 0 011-1h4a1 1 0 011 1v2"/></svg></button></td></tr>`).join('')
+    :`<tr><td colspan="6" style="text-align:center;padding:20px;color:var(--muted)">لم تُسجَّل زكاة بعد</td></tr>`;
+}
+function deleteZakatRecord(idx){
+  if(!confirm('حذف هذا السطر من سجل الزكاة؟'))return;
+  APP_SETTINGS.zakat.history.splice(idx,1);persistAppSettings();renderZakatHistory();
+}
+function openZakatPay(){
+  const S=zakatState();
+  document.getElementById('zpay-amount').value=S.due.toFixed(2);
+  document.getElementById('zpay-date').value=today();
+  populateSelect('zpay-bank');
+  openModal('modal-zakat-pay');
+}
+async function doZakatPay(){
+  const S=zakatState();
+  const amount=N2(document.getElementById('zpay-amount').value),bankId=+document.getElementById('zpay-bank').value;
+  const dt=document.getElementById('zpay-date').value||today();
+  if(!amount||amount<=0)return alert('أدخل المبلغ');
+  if(!bankId)return alert('اختر الحساب الذي ستُخرج منه الزكاة');
+  const bank=DB.banks.find(b=>b.id===bankId);if(!bank)return alert('الحساب غير موجود');
+  const perUnit=toEGP(1,bank.currency||'EGP')||1;
+  const amtBank=+(amount/perUnit).toFixed(4);
+  if(N2(bank.balance)<amtBank)return alert('الرصيد غير كافٍ: '+fmtN(bank.balance)+' '+(bank.currency||''));
+  try{
+    await sbPost('bank_transactions',[{bank_id:bankId,type:'سحب',amount:amtBank,date:dt,notes:'زكاة المال — حول '+(S.hawl?S.hawl.start+' → '+S.hawl.end:''),category:'زكاة'}]);
+    const z=APP_SETTINGS.zakat;z.history=z.history||[];
+    z.history.push({date:dt,amount,base:S.base,bank_id:bankId,bank_name:bank.name,hawl_end:S.hawl?S.hawl.end:null});
+    if(S.hawl)z.start_date=S.hawl.end;
+    await persistAppSettings();
+    closeModal('modal-zakat-pay');toast('تم تسجيل إخراج الزكاة وبدأ الحول الجديد');
+    await loadAll();
+  }catch(e){console.error('doZakatPay:',e);toast('خطأ: '+e.message,false)}
+}
+
+// ═══════════════════════════════════════════════════
+//  STOCK MARKET FILTER
+// ═══════════════════════════════════════════════════
+let activeStockMarket='ALL';
+function setStockMarket(market,el){
+  activeStockMarket=market;
+  document.querySelectorAll('#page-stocks .tab[data-market]').forEach(t=>t.classList.toggle('active',t.dataset.market===market));
+  renderStocks();
+}
+
+// ═══════════════════════════════════════════════════
+//  INIT
+// ═══════════════════════════════════════════════════
+initDark();
+initAuthGate();
