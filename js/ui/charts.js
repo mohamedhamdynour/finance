@@ -21,8 +21,14 @@ export function ensureChartLoaded() {
     const s = document.createElement('script');
     s.src = 'https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js';
     s.async = true;
-    s.onload = () => {
+        s.onload = () => {
       console.log('[charts] ✓ Chart.js loaded lazily');
+      // أعد رسم الصفحة الحالية بعد تحميل Chart.js (لرسم الرسوم في أول فتح)
+      setTimeout(() => {
+        if (typeof window.renderPage === 'function') {
+          try { window.renderPage(); } catch (e) { console.warn('[charts] re-render failed:', e); }
+        }
+      }, 150);
       resolve(true);
     };
     s.onerror = () => {
