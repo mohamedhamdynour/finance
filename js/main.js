@@ -476,6 +476,7 @@ function exposeGlobals() {
     doCertBreak: certsPage.doCertBreak,
     doCertPayout: certsPage.doCertPayout,
     doBulkCertPayout: certsPage.doBulkCertPayout,
+    openCertAttachments: certsPage.openCertAttachments,
     openCertPayout: (id) => import('./ui/modals.js').then(m => m.openCertPayout(id)),
     openBulkCertPayout: () => import('./ui/modals.js').then(m => m.openBulkCertPayout())
   });
@@ -563,6 +564,8 @@ Object.assign(window, {
   deleteInstallmentPayment: installmentsPage.deleteInstallmentPayment,
   autoCalcInstallmentAmount: installmentsPage.autoCalcInstallmentAmount
 });
+
+  
   // Settings helpers (تُستدعى من innerHTML بـ window.__)
   window.__DB__ = DB;   // لفتح المرفقات
   saveForecastSettings: forecastPage.saveForecastSettings,
