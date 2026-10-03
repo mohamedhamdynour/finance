@@ -10,6 +10,11 @@ import { populateMetalTypeSelect, populateCurrencySelect } from '../core/setting
 export function openModal(id) {
   const el = document.getElementById(id);
   if (!el) return;
+  
+  // استعد زر الحفظ إن كان مخفيًا (من نافذة المرفقات مثلاً)
+  const saveBtn = document.getElementById('edit-modal-save-btn');
+  if (saveBtn) saveBtn.style.display = '';
+  
   el.classList.add('open');
   initModal(id);
 }
