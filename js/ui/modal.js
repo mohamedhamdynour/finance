@@ -414,3 +414,112 @@ export function updateCertBreakPreview() {
   window._certBreakRefund = Math.max(0, refund);
   window._certBreakEarnedInt = remainingInterest;
 }
+
+export function setCertPayoutMode(mode) {
+  const singleWrap = document.getElementById('ecp-mode-single-wrap');
+  const scheduleWrap = document.getElementById('ecp-mode-schedule-wrap');
+  document.getElementById('ecp-single-fields').classList.toggle('hidden', mode === 'schedule');
+  document.getElementById('ecp-schedule-fields').classList.toggle('hidden', mode !== 'schedule');
+  document.getElementById('ecp-submit-btn').textContent = mode === 'schedule' ? ' تسجيل كل الدفعات المستحقة' : ' صرف العائد';
+  if (singleWrap) singleWrap.style.borderColor = mode === 'single' ? 'var(--green)' : 'var(--border2)';
+  if (scheduleWrap) scheduleWrap.style.borderColor = mode === 'schedule' ? 'var(--green)' : 'var(--border2)';
+  if (mode === 'schedule') {
+    const certId = +document.getElementById('ecp-cert-id').value;
+    const cert = DB.certs.find(c => c.id === certId);
+    if (!cert) return;
+    const sched = getCertPayoutSchedule(cert);
+    const preview = document.getElementById('ecp-schedule-preview');
+    preview.innerHTML = sched.unpaidPeriods.length
+      ? sched.unpaidPeriods.map(p => `<div style="display:flex;justify-content:space-between;padding:5px 2px;font-size:12px;border-bottom:.5px solid var(--border)"><span>دفعة رقم ${p.period} — ${p.date}</span><strong class="pos">${fmt(p.amount)}</strong></div>`).join('')
+        + `<div style="display:flex;justify-content:space-between;padding:6px 2px;font-size:12.5px;font-weight:800;margin-top:4px"><span>الإجمالي (${sched.unpaidPeriods.length} دفعة)</span><span>${fmt(sched.unpaidPeriods.reduce((a, p) => a + p.amount, 0))}</span></div>`
+      : `<div style="text-align:center;color:var(--muted);font-size:12px;padding:10px">لا توجد دفعات مستحقة غير مُسجَّلة</div>`;
+  }
+}
+
+export function openCertPayout(certId) {
+  const cert = DB.certs.find(c => c.id === certId);
+  if (!cert) return;
+  document.getElementById('ecp-cert-id').value = certId;
+  const accrued = calcAccruedInterest(cert);
+  const alreadyPaid = N2(cert.interest_paid);
+  const canCollect = Math.max(0, accrued - alreadyPaid);
+  const nextDate = calcNextPayoutDate(cert);
+  const payout = cert.payout_type || 'سنوي';
+  const periodDays = { 'يومي': 1, 'أسبوعي': 7, 'شهري': 30.4375, 'سنوي': 365.25 }[payout] || 365.25;
+  const totalDays = Math.max(1, (new Date(cert.maturity_date) - new Date(cert.issued_date)) / 86400000);
+  const totalPeriods = Math.ceil(totalDays / periodDays);
+  const perPeriod = N2(cert.total_interest) / Math.max(1, totalPeriods);
+  const elapsedDays = (new Date() - new Date(cert.issued_date)) / 86400000;
+  const completedPeriods = Math.floor(Math.max(0, elapsedDays) / periodDays);
+
+  document.getElementById('ecp-info').innerHTML = `
+    <div style="font-weight:800;font-size:14px;margin-bottom:10px">${escapeHtml(cert.name)} <span class="badge badge-blue" style="font-size:10px;margin-right:6px">${payout}</span></div>
+    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:10px">
+      <div style="padding:10px;background:var(--blue-l);border-radius:8px;text-align:center"><div style="font-size:10px;color:var(--muted);margin-bottom:4px">فترات مكتملة</div><div style="font-weight:900;font-size:18px;color:var(--blue)">${completedPeriods}</div><div style="font-size:9.5px;color:var(--muted)">من ${totalPeriods}</div></div>
+      <div style="padding:10px;background:var(--green-l);border-radius:8px;text-align:center"><div style="font-size:10px;color:var(--muted);margin-bottom:4px">مستحق للصرف</div><div style="font-weight:900;font-size:18px;color:var(--green)">${fmt(canCollect)}</div></div>
+      <div style="padding:10px;background:var(--gold-l);border-radius:8px;text-align:center"><div style="font-size:10px;color:var(--muted);margin-bottom:4px">الدفعة القادمة</div><div style="font-weight:900;font-size:14px;color:var(--gold)">${nextDate ? nextDate.toLocaleDateString('ar-EG', { day: 'numeric', month: 'short' }) : 'عند الاستحقاق'}</div><div style="font-size:9.5px;color:var(--muted)">${fmt(perPeriod)}</div></div>
+    </div>
+    <div style="font-size:11px;color:var(--muted);padding:8px;background:var(--surface2);border-radius:6px">مُصرَّف سابقاً: <strong>${fmt(alreadyPaid)}</strong> | إجمالي الفوائد: <strong>${fmt(N2(cert.total_interest))}</strong> | متبقي: <strong style="color:var(--gold)">${fmt(Math.max(0, N2(cert.total_interest) - alreadyPaid))}</strong></div>`;
+  document.getElementById('ecp-amount').value = canCollect > 0 ? canCollect.toFixed(2) : '';
+  populateSelect('ecp-bank');
+  if (cert.bank_id) document.getElementById('ecp-bank').value = cert.bank_id;
+  document.getElementById('ecp-date').value = today();
+  const sr = document.querySelector('input[name="ecp-mode"][value="single"]');
+  if (sr) sr.checked = true;
+  setCertPayoutMode('single');
+  openModal('modal-cert-payout');
+}
+
+export function openBulkCertPayout() {
+  if (!DB.certs.length) return alert('لا توجد شهادات');
+  document.getElementById('bcp-date').value = today();
+  const sr = document.querySelector('input[name="bcp-mode"][value="single"]');
+  if (sr) sr.checked = true;
+  setBulkCertMode('single');
+  openModal('modal-bulk-cert-payout');
+}
+
+export function setBulkCertMode(mode) {
+  const singleWrap = document.getElementById('bcp-mode-single-wrap');
+  const scheduleWrap = document.getElementById('bcp-mode-schedule-wrap');
+  document.getElementById('bcp-date-wrap').classList.toggle('hidden', mode === 'schedule');
+  if (singleWrap) singleWrap.style.borderColor = mode === 'single' ? 'var(--green)' : 'var(--border2)';
+  if (scheduleWrap) scheduleWrap.style.borderColor = mode === 'schedule' ? 'var(--green)' : 'var(--border2)';
+  renderBulkCertList(mode);
+}
+
+export function renderBulkCertList(mode) {
+  mode = mode || document.querySelector('input[name="bcp-mode"]:checked')?.value || 'single';
+  const listEl = document.getElementById('bcp-list');
+  if (!listEl) return;
+  if (mode === 'single') {
+    const items = DB.certs.map(c => {
+      const remaining = Math.max(0, N2(c.total_interest) - N2(c.interest_paid));
+      const accrued = calcAccruedInterest(c);
+      const available = Math.max(0, Math.min(remaining, accrued));
+      return { c, available };
+    }).filter(x => x.available > 0.01);
+    listEl.innerHTML = items.length
+      ? items.map(({ c, available }) => `<div style="display:flex;align-items:center;gap:10px;padding:9px 10px;border-bottom:.5px solid var(--border)"><input type="checkbox" class="bcp-check" data-cert="${c.id}" checked style="width:17px;height:17px;flex-shrink:0"><div style="flex:1;min-width:0"><div style="font-weight:700;font-size:12.5px">${escapeHtml(c.name)}</div><div style="font-size:10.5px;color:var(--muted)">${escapeHtml(c.bank_name || '—')} · مستحق: ${fmt(available)}</div></div><input type="number" step="0.01" class="form-control bcp-amount" data-cert="${c.id}" value="${available.toFixed(2)}" style="width:110px;padding:6px 8px;font-size:12px"></div>`).join('')
+      : `<div style="text-align:center;color:var(--muted);font-size:12px;padding:20px">لا توجد عوائد مستحقة</div>`;
+  } else {
+    const items = DB.certs.map(c => ({ c, sched: getCertPayoutSchedule(c) })).filter(x => x.sched.unpaidPeriods.length > 0);
+    listEl.innerHTML = items.length
+      ? items.map(({ c, sched }) => `<div style="display:flex;align-items:center;gap:10px;padding:9px 10px;border-bottom:.5px solid var(--border)"><input type="checkbox" class="bcp-check" data-cert="${c.id}" checked style="width:17px;height:17px;flex-shrink:0"><div style="flex:1;min-width:0"><div style="font-weight:700;font-size:12.5px">${escapeHtml(c.name)}</div><div style="font-size:10.5px;color:var(--muted)">${sched.unpaidPeriods.length} دفعة</div></div><div style="font-weight:800;color:var(--green);font-size:12.5px">${fmt(sched.unpaidPeriods.reduce((a, p) => a + p.amount, 0))}</div></div>`).join('')
+      : `<div style="text-align:center;color:var(--muted);font-size:12px;padding:20px">لا توجد دفعات مستحقة</div>`;
+  }
+}
+
+export function setDividendMode(mode) {
+  const cashWrap = document.getElementById('ediv-mode-cash-wrap');
+  const stockWrap = document.getElementById('ediv-mode-stock-wrap');
+  document.getElementById('ediv-amount-wrap').classList.toggle('hidden', mode === 'stock');
+  document.getElementById('ediv-shares-wrap').classList.toggle('hidden', mode !== 'stock');
+  document.getElementById('ediv-bank-wrap').classList.toggle('hidden', mode === 'stock');
+  if (cashWrap) { cashWrap.style.borderColor = mode === 'cash' ? 'var(--green)' : 'var(--border2)'; cashWrap.style.background = mode === 'cash' ? 'var(--green-l)' : 'transparent'; }
+  if (stockWrap) { stockWrap.style.borderColor = mode === 'stock' ? 'var(--green)' : 'var(--border2)'; stockWrap.style.background = mode === 'stock' ? 'var(--green-l)' : 'transparent'; }
+}
+
+document.addEventListener('metalTypeChange', () => {
+  updateMetalBuyPreview();
+});
