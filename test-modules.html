@@ -1,1 +1,193 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <title>اختبار الوحدات — Phase 1B</title>
+  <style>
+    body { font-family: system-ui; padding: 20px; background: #f4f6fb; }
+    h1 { color: #1a56db; }
+    .pass { color: #0d9488; font-weight: 700; }
+    .fail { color: #e11d48; font-weight: 700; }
+    pre { background: #0f1729; color: #f0f4ff; padding: 12px; border-radius: 8px; overflow-x: auto; }
+    .test { padding: 8px 0; border-bottom: 1px solid #e8edf5; }
+    .ok::before  { content: '✓ '; color: #0d9488; font-weight: 900; }
+    .err::before { content: '✗ '; color: #e11d48; font-weight: 900; }
+  </style>
+</head>
+<body>
+  <h1>اختبار الوحدات — Phase 1B (الجزء 1)</h1>
+  <div id="results"></div>
+  <h2>ملخص</h2>
+  <pre id="summary">جاري التشغيل...</pre>
 
+  <script type="module">
+    import { DB, UI, APP_SETTINGS, CHARTS, conn } from './js/state.js';
+    import {
+      N2, fmtN, fmt, fmtK, pct, pctN, today, sign, cls,
+      periodStart, periodEnd, filterByPeriod,
+      baseCur, currencyCodes, currencyName, getRate, toEGP,
+      getBankColor, BANK_PALETTE,
+      escapeHtml, debounce, encodeID
+    } from './js/core/utils.js';
+    import { friendlyError, handleError } from './js/core/errors.js';
+    import { validate, schemas } from './js/core/validation.js';
+
+    const results = [];
+    let passed = 0, failed = 0;
+
+    function test(name, fn) {
+      try {
+        const r = fn();
+        if (r === true) { passed++; results.push({ ok: true, name }); }
+        else { failed++; results.push({ ok: false, name, detail: r }); }
+      } catch (e) {
+        failed++; results.push({ ok: false, name, detail: e.message });
+      }
+    }
+
+    // ═══════════════════ state.js ═══════════════════
+    test('DB object موجود بأرصدة أساسية', () =>
+      Array.isArray(DB.banks) && Array.isArray(DB.bankTxns) ? true : 'DB.banks أو DB.bankTxns غير مصفوفة');
+
+    test('UI.activePage = dashboard', () =>
+      UI.activePage === 'dashboard' ? true : `القيمة: ${UI.activePage}`);
+
+    test('APP_SETTINGS.base_currency = EGP', () =>
+      APP_SETTINGS.base_currency === 'EGP' ? true : `القيمة: ${APP_SETTINGS.base_currency}`);
+
+    test('APP_SETTINGS.currencies تحتوي 6 عملات', () =>
+      APP_SETTINGS.currencies.length === 6 ? true : `العدد: ${APP_SETTINGS.currencies.length}`);
+
+    test('CHARTS كائن فارغ', () =>
+      typeof CHARTS === 'object' && Object.keys(CHARTS).length === 0 ? true : 'CHARTS غير فارغ');
+
+    test('conn.SB_URL سلسلة فارغة', () =>
+      conn.SB_URL === '' ? true : `القيمة: ${conn.SB_URL}`);
+
+    // ═══════════════════ utils.js — أرقام ═══════════════════
+    test('N2("abc") = 0', () => N2('abc') === 0 ? true : `القيمة: ${N2('abc')}`);
+    test('N2("123.45") = 123.45', () => N2('123.45') === 123.45 ? true : `القيمة: ${N2('123.45')}`);
+    test('N2(null) = 0', () => N2(null) === 0 ? true : `القيمة: ${N2(null)}`);
+
+    test('fmtN(1234.5) يحتوي أرقام عربية', () => {
+      const s = fmtN(1234.5);
+      return s.length > 0 && !s.includes('NaN') ? true : `القيمة: ${s}`;
+    });
+
+    test('fmt(100) ينتهي بـ EGP', () => fmt(100).endsWith('EGP') ? true : `القيمة: ${fmt(100)}`);
+    test('fmtK(1500) يبدأ بـ 1.5K', () => fmtK(1500).startsWith('1.5K') ? true : `القيمة: ${fmtK(1500)}`);
+    test('fmtK(2500000) يبدأ بـ 2.5M', () => fmtK(2500000).startsWith('2.5M') ? true : `القيمة: ${fmtK(2500000)}`);
+
+    test('pct(50, 100) = 50.0%', () => pct(50, 100) === '50.0%' ? true : `القيمة: ${pct(50, 100)}`);
+    test('pct(50, 0) = 0%', () => pct(50, 0) === '0%' ? true : `القيمة: ${pct(50, 0)}`);
+    test('pctN(25, 100) = 25', () => pctN(25, 100) === 25 ? true : `القيمة: ${pctN(25, 100)}`);
+
+    test('sign(5) = "+"', () => sign(5) === '+' ? true : `القيمة: ${sign(5)}`);
+    test('sign(-3) = ""', () => sign(-3) === '' ? true : `القيمة: ${sign(-3)}`);
+    test('cls(5) = "pos"', () => cls(5) === 'pos' ? true : `القيمة: ${cls(5)}`);
+    test('cls(-3) = "neg"', () => cls(-3) === 'neg' ? true : `القيمة: ${cls(-3)}`);
+
+    // ═══════════════════ utils.js — تواريخ ═══════════════════
+    test('today() بصيغة YYYY-MM-DD', () => /^\d{4}-\d{2}-\d{2}$/.test(today()) ? true : `القيمة: ${today()}`);
+
+    test('periodStart("3m") قبل اليوم', () => periodStart('3m') < today() ? true : 'periodStart(3m) >= today');
+    test('periodStart("all") = 2000-01-01', () => periodStart('all') === '2000-01-01' ? true : `القيمة: ${periodStart('all')}`);
+    test('periodEnd("1y") = today', () => periodEnd('1y') === today() ? true : `القيمة: ${periodEnd('1y')}`);
+
+    test('filterByPeriod يستبعد خارج النطاق', () => {
+      const data = [
+        { date: '2020-01-01', v: 1 },
+        { date: today(),       v: 2 },
+        { date: '2025-01-01', v: 3 }
+      ];
+      const out = filterByPeriod(data, '3m');
+      return out.some(x => x.v === 2) && !out.some(x => x.v === 1) ? true : `النتيجة: ${JSON.stringify(out)}`;
+    });
+
+    // ═══════════════════ utils.js — عملات ═══════════════════
+    test('baseCur() = EGP', () => baseCur() === 'EGP' ? true : `القيمة: ${baseCur()}`);
+    test('currencyCodes() تحتوي EGP', () => currencyCodes().includes('EGP') ? true : 'EGP غير موجود');
+    test('currencyName("USD") عربي', () => currencyName('USD').length > 0 ? true : 'فارغ');
+    test('getRate("EGP") = 1', () => getRate('EGP') === 1 ? true : `القيمة: ${getRate('EGP')}`);
+    test('getRate("USD") = 1 (default)', () => getRate('USD') === 1 ? true : `القيمة: ${getRate('USD')}`);
+    test('toEGP(100, "EGP") = 100', () => toEGP(100, 'EGP') === 100 ? true : `القيمة: ${toEGP(100, 'EGP')}`);
+
+    // ═══════════════════ utils.js — ألوان ═══════════════════
+    test('BANK_PALETTE 12 لونًا', () => BANK_PALETTE.length === 12 ? true : `العدد: ${BANK_PALETTE.length}`);
+    test('getBankColor(999) = fallback أزرق', () => getBankColor(999) === '#3b82f6' ? true : `القيمة: ${getBankColor(999)}`);
+
+    // ═══════════════════ utils.js — إضافات جديدة ═══════════════════
+    test('escapeHtml("<script>") مُهرَّب', () => {
+      const r = escapeHtml('<script>alert(1)</script>');
+      return !r.includes('<script>') && r.includes('&lt;') ? true : `القيمة: ${r}`;
+    });
+
+    test('escapeHtml يحفظ النص العربي', () => escapeHtml('مرحبًا') === 'مرحبًا' ? true : `القيمة: ${escapeHtml('مرحبًا')}`);
+
+    test('encodeID("ذهب 24") بلا مسافات', () => !encodeID('ذهب 24').includes(' ') ? true : `القيمة: ${encodeID('ذهب 24')}`);
+
+    // ═══════════════════ errors.js ═══════════════════
+    test('friendlyError(null) يرجع رسالة', () => friendlyError(null).length > 0 ? true : 'فارغ');
+    test('friendlyError(code 23505) = "موجود بالفعل"', () =>
+      friendlyError({ code: '23505' }).includes('موجود') ? true : `القيمة: ${friendlyError({ code: '23505' })}`);
+    test('friendlyError(invalid-credential) عربية', () =>
+      friendlyError({ code: 'auth/invalid-credential' }).includes('صحيحة') ? true : `القيمة: ${friendlyError({ code: 'auth/invalid-credential' })}`);
+    test('friendlyError(err بسيط) يقتطع الرسالة', () => {
+      const long = 'x'.repeat(500);
+      const r = friendlyError({ message: long });
+      return r.length <= 200 ? true : `الطول: ${r.length}`;
+    });
+
+    // ═══════════════════ validation.js ═══════════════════
+    test('validate("bank") يقبل بيانات صحيحة', () => {
+      const v = validate('bank', { name: 'CIB', type: 'جاري', currency: 'EGP', balance: 1000 });
+      return v.ok ? true : `الأخطاء: ${v.errors.join(' · ')}`;
+    });
+
+    test('validate("bank") يرفض name فارغ', () => {
+      const v = validate('bank', { type: 'جاري', currency: 'EGP' });
+      return !v.ok && v.errors.some(e => e.includes('name')) ? true : `النتيجة: ${JSON.stringify(v)}`;
+    });
+
+    test('validate("bank") يرفض currency غير مُدرَجة', () => {
+      const v = validate('bank', { name: 'X', type: 'جاري', currency: 'XYZ' });
+      return !v.ok && v.errors.some(e => e.includes('currency')) ? true : `النتيجة: ${JSON.stringify(v.errors)}`;
+    });
+
+    test('validate("bank") يحوّل balance لنص رقم', () => {
+      const v = validate('bank', { name: 'X', type: 'جاري', currency: 'EGP', balance: '1500.5' });
+      return v.ok && v.value.balance === 1500.5 ? true : `النتيجة: ${JSON.stringify(v.value)}`;
+    });
+
+    test('validate("deposit") يرفض مبلغ 0', () => {
+      const v = validate('deposit', { bank_id: 1, amount: 0, date: today() });
+      return !v.ok ? true : 'قبِلت مبلغ 0';
+    });
+
+    test('validate("goal") يقبل بيانات صحيحة', () => {
+      const v = validate('goal', { name: 'عقار', target: 500000, category: 'all' });
+      return v.ok ? true : `الأخطاء: ${v.errors.join(' · ')}`;
+    });
+
+    test('validate("goal") يرفض category مجهولة', () => {
+      const v = validate('goal', { name: 'X', target: 1000, category: 'unknown' });
+      return !v.ok ? true : 'قبِلت category غير مسموحة';
+    });
+
+    // ═══════════════════ عرض النتائج ═══════════════════
+    const resultsEl = document.getElementById('results');
+    resultsEl.innerHTML = results.map(r =>
+      `<div class="test ${r.ok ? 'ok' : 'err'}">${r.name}${r.ok ? '' : ' — ' + (r.detail || 'فشل')}</div>`
+    ).join('');
+
+    const total = passed + failed;
+    document.getElementById('summary').textContent =
+      `✅ نجح: ${passed}   ❌ فشل: ${failed}   📊 الإجمالي: ${total}`;
+
+    console.log(`[Tests] ${passed}/${total} passed`);
+    if (failed > 0) {
+      console.warn('[Tests] Failed tests:', results.filter(r => !r.ok));
+    }
+  </script>
+</body>
+</html>
