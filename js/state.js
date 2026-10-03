@@ -18,7 +18,9 @@ export const DB = {
   exchangeRates: [],
   snapshots: [],
   debts: [],
-  debtPayments: []
+  debtPayments: [],
+  installments: [],
+  installmentPayments: []
 };
 
 // ─── حالة الواجهة (UI) ─────────────────────────────────────────
