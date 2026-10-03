@@ -102,9 +102,20 @@ function renderActiveSection() {
         </div>
       </div>
     </div>
+
+    <div class="card" style="margin-bottom:16px">
+      <div class="card-header">
+        <div class="card-title">
+          <div class="card-title-icon" style="background:var(--purple-l);color:var(--purple)">
+            <svg viewBox="0 0 24 24"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
+          </div>
+          مقارنة بصرية
+        </div>
+      </div>
+      <div class="card-body"><div class="chart-box" style="min-height:220px"><canvas id="cmp-bar"></canvas></div></div>
+    </div>
   `;
 
-  // رسم المقارنة
   setTimeout(() => {
     const labels = data.metrics.map(m => m.label);
     const currData = data.metrics.map(m => +m.current.toFixed(2));
