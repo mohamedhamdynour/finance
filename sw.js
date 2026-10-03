@@ -13,10 +13,22 @@ const STATIC_ASSETS = [
   './',
   './index.html',
   './style.css',
-  './app.js',
   './manifest.json',
   './icon.svg',
-  './icon-maskable.svg'
+  './icon-maskable.svg',
+  './js/main.js',
+  './js/state.js',
+  './js/core/utils.js',
+  './js/core/supabase.js',
+  './js/core/auth.js',
+  './js/core/settings.js',
+  './js/domain/calc.js',
+  './js/ui/toast.js',
+  './js/ui/shared.js',
+  './js/ui/modals.js',
+  './js/ui/charts.js',
+  './js/ui/undo.js',
+  './js/ui/skeleton.js'
 ];
 
 // ─── Install: pre-cache app shell ────────────────────────────────
