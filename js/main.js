@@ -28,6 +28,7 @@ import * as riskPage from './ui/pages/risk.js';
 import * as forecastPage from './ui/pages/forecast.js';
 import { installAttachmentHandlers } from './ui/attachments.js';
 import { attachmentsCount } from './domain/attachments.js';
+import { exportExcel } from './core/excel.js';
 
 // ─── 2) UI Shared ──────────────────────────────────────────────
 import { toast, installToastGlobal } from './ui/toast.js';
@@ -569,6 +570,7 @@ Object.assign(window, {
   // Settings helpers (تُستدعى من innerHTML بـ window.__)
   window.__DB__ = DB;   // لفتح المرفقات
   saveForecastSettings: forecastPage.saveForecastSettings,
+  window.exportExcel = exportExcel;
   window.__renameSettingsCurrency = renameSettingsCurrency;
   window.__removeSettingsCurrency = removeSettingsCurrency;
   window.__populateMetalTypeSelect = populateMetalTypeSelect;
