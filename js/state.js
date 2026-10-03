@@ -20,7 +20,8 @@ export const DB = {
   debts: [],
   debtPayments: [],
   installments: [],
-  installmentPayments: []
+  installmentPayments: [],
+  attachments: []
 };
 
 // ─── حالة الواجهة (UI) ─────────────────────────────────────────
