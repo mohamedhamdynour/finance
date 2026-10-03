@@ -29,6 +29,8 @@ const STATIC_ASSETS = [
   './js/ui/charts.js',
   './js/ui/undo.js',
   './js/ui/skeleton.js'
+  './js/core/network.js',
+  './js/ui/network-indicator.js',
 ];
 
 // ─── Install: pre-cache app shell ────────────────────────────────
