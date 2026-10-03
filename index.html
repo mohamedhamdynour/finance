@@ -2,8 +2,18 @@
 <html lang="ar" dir="rtl">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>محفظتي — Pro</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>Ma7fazty Pro</title>
+<meta name="description" content="نظام إدارة المحفظة المالية الشخصية — أسهم، معادن، شهادات، ديون، زكاة">
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#1a56db">
+<meta name="color-scheme" content="light dark">
+<link rel="icon" type="image/svg+xml" href="icon.svg">
+<link rel="apple-touch-icon" href="icon.svg">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="محفظتي">
+<meta name="mobile-web-app-capable" content="yes">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
@@ -947,5 +957,20 @@
 </div>
 
 <script src="app.js"></script>
+
+<!-- ═══ PWA: Service Worker Registration ═══ -->
+<script>
+  if ('serviceWorker' in navigator) {
+    window.addEventListener('load', () => {
+      navigator.serviceWorker.register('sw.js', { scope: './' })
+        .then(reg => {
+          console.log('[PWA] Service Worker registered:', reg.scope);
+          // افحص تحديثات كل ساعة
+          setInterval(() => reg.update().catch(() => {}), 60 * 60 * 1000);
+        })
+        .catch(err => console.warn('[PWA] SW registration failed:', err));
+    });
+  }
+</script>
 </body>
 </html>
