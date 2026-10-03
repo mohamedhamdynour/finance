@@ -376,3 +376,97 @@ export function addHijriYear(ds) {
   }
   return ymdLocal(new Date(start.getTime() + 354 * 86400000));
 }
+
+// ══════════════════════════════════════════════════════════════════
+//  الأقساط
+// ══════════════════════════════════════════════════════════════════
+
+/**
+ * يحسب عدد الأيام حسب التكرار
+ */
+function freqDays(freq) {
+  return { monthly: 30.4375, weekly: 7, quarterly: 91.3125, yearly: 365.25 }[freq] || 30.4375;
+}
+
+/**
+ * يحسب تاريخ الدفعة القادمة لقسط معين
+ * @param {object} inst - صف من جدول installments
+ * @param {Array} payments - دفعات هذا القسط
+ * @returns {{date: string|null, number: number, isOverdue: boolean, daysLeft: number|null}}
+ */
+export function nextInstallmentDue(inst, payments) {
+  const paidCount = payments.filter(p => !p.deleted_at).length;
+  if (paidCount >= inst.installments_count) {
+    return { date: null, number: inst.installments_count, isOverdue: false, daysLeft: null };
+  }
+  const days = freqDays(inst.frequency);
+  const start = new Date(inst.start_date);
+  const nextDate = new Date(start.getTime() + paidCount * days * 86400000);
+  const now = new Date();
+  const daysLeft = Math.ceil((nextDate - now) / 86400000);
+  return {
+    date: nextDate.toISOString().slice(0, 10),
+    number: paidCount + 1,
+    isOverdue: nextDate < now,
+    daysLeft
+  };
+}
+
+/**
+ * يحسب تقدم قسط: مدفوع، متبقي، نسبة، الحالة
+ */
+export function installmentProgress(inst) {
+  const payments = DB.installmentPayments.filter(p => p.installment_id === inst.id && !p.deleted_at);
+  const paidAmount = payments.reduce((a, p) => a + N2(p.amount), 0);
+  const paidCount = payments.length;
+  const totalAmount = N2(inst.total_amount);
+  const remaining = Math.max(0, totalAmount - paidAmount);
+  const remainingCount = Math.max(0, inst.installments_count - paidCount);
+  const pct = totalAmount > 0 ? Math.min(100, paidAmount / totalAmount * 100) : 0;
+  const completed = paidCount >= inst.installments_count;
+  const next = nextInstallmentDue(inst, payments);
+  return {
+    payments,
+    paidAmount,
+    paidCount,
+    totalAmount,
+    remaining,
+    remainingCount,
+    pct,
+    completed,
+    next
+  };
+}
+
+/**
+ * ملخص إجمالي كل الأقساط
+ */
+export function installmentsSummary() {
+  let totalAmount = 0;
+  let totalPaid = 0;
+  let totalRemaining = 0;
+  let activeCount = 0;
+  let overdueCount = 0;
+  let nextMonthDue = 0;
+
+  DB.installments.forEach(inst => {
+    const prog = installmentProgress(inst);
+    totalAmount += prog.totalAmount;
+    totalPaid += prog.paidAmount;
+    totalRemaining += prog.remaining;
+    if (!prog.completed) {
+      activeCount++;
+      if (prog.next.isOverdue) overdueCount++;
+      // احسب المستحق خلال 30 يوم
+      if (prog.next.date && prog.next.daysLeft !== null && prog.next.daysLeft >= 0 && prog.next.daysLeft <= 30) {
+        nextMonthDue += N2(inst.installment_amount);
+      }
+    }
+  });
+
+  return {
+    totalAmount, totalPaid, totalRemaining,
+    activeCount, overdueCount, nextMonthDue,
+    totalCount: DB.installments.length
+  };
+}
