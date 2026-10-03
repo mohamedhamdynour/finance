@@ -8,6 +8,8 @@ import { toast } from '../toast.js';
 import { kpi, svgIcon, populateSelect } from '../shared.js';
 import { openModal, closeModal } from '../modals.js';
 import { nextRecDate } from '../../domain/calc.js';
+import { renderDetectorSection } from '../recurring-detector.js';
+import { attachmentsCount } from '../../domain/attachments.js';
 
 const reload = () => window.loadAll?.();
 
@@ -28,6 +30,16 @@ export function renderRecurring() {
     return { ...r, next, daysUntil, isDue };
   });
 
+ const detectorEl = document.getElementById('recurring-detector');
+  if (detectorEl) {
+    try {
+      detectorEl.innerHTML = renderDetectorSection();
+    } catch (e) {
+      console.warn('[detector] failed:', e.message);
+      detectorEl.innerHTML = '';
+    }
+  }
+  
   const dueCount = items.filter(i => i.isDue).length;
   const monthlyTotal = items.filter(i => i.type === 'إيداع').reduce((a, i) => a + N2(i.amount) * (freqMonthlyFactor[i.freq] || 1), 0)
     - items.filter(i => i.type === 'سحب').reduce((a, i) => a + N2(i.amount) * (freqMonthlyFactor[i.freq] || 1), 0);
