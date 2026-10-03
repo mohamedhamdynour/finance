@@ -1,7 +1,7 @@
 // ══════════════════════════════════════════════════════════════════
 //  pages/reports.js — التقارير والتحليل + تصدير PDF
 // ══════════════════════════════════════════════════════════════════
-import { DB, UI, APP_SETTINGS } from '../../state.js';
+import { DB, UI, APP_SETTINGS, CHARTS } from '../../state.js';
 import { N2, fmt, fmtN, fmtK, pct, sign, cls, today, escapeHtml, getBankColor, toEGP, baseCur, MARKET_NAMES, MARKET_COLORS } from '../../core/utils.js';
 import { PALETTE } from '../charts.js';
 import { toast } from '../toast.js';
@@ -294,8 +294,7 @@ export function renderReportCharts(PT) {
     destroyChart('r-certs');
     const cv = document.getElementById('r-certs');
     if (cv && window.Chart) {
-      window.__CHARTS__ = window.__CHARTS__ || {};
-      window.__CHARTS__['r-certs'] = new window.Chart(cv, {
+      CHARTS['r-certs'] = new window.Chart(cv, {
         type: 'bar',
         data: {
           labels: sorted.map(c => c.name),
