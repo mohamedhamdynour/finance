@@ -956,21 +956,6 @@
   <span id="toast-msg"></span>
 </div>
 
-<script src="app.js"></script>
-
-<!-- ═══ PWA: Service Worker Registration ═══ -->
-<script>
-  if ('serviceWorker' in navigator) {
-    window.addEventListener('load', () => {
-      navigator.serviceWorker.register('sw.js', { scope: './' })
-        .then(reg => {
-          console.log('[PWA] Service Worker registered:', reg.scope);
-          // افحص تحديثات كل ساعة
-          setInterval(() => reg.update().catch(() => {}), 60 * 60 * 1000);
-        })
-        .catch(err => console.warn('[PWA] SW registration failed:', err));
-    });
-  }
-</script>
+<script type="module" src="js/main.js"></script>
 </body>
 </html>
