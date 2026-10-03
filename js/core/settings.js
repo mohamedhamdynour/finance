@@ -1,12 +1,13 @@
 // ══════════════════════════════════════════════════════════════════
 //  settings.js — إعدادات التطبيق + العملات + الحفظ
+//  ملاحظة: baseCur, currencyCodes, currencyName, N2, escapeHtml
+//          تُستورد من utils.js — لا تُعرَّف هنا نهائياً
 // ══════════════════════════════════════════════════════════════════
-import { baseCur, currencyCodes, N2, escapeHtml } from './utils.js';
 import { conn, APP_SETTINGS } from '../state.js';
 import { sbGet, sbPost, sbPatchBy } from './supabase.js';
 import { baseCur, currencyCodes, N2, escapeHtml } from './utils.js';
 
-// ─── تسميات عملات معروفة (تُستخدم لملء الاسم الافتراضي) ───────
+// ─── تسميات العملات المعروفة ────────────────────────────────────
 export const CURRENCY_LABELS = {
   EGP: 'الجنيه المصري', SAR: 'ريال سعودي', AED: 'درهم إماراتي',
   USD: 'دولار أمريكي', EUR: 'يورو', GBP: 'جنيه إسترليني',
@@ -14,7 +15,7 @@ export const CURRENCY_LABELS = {
   OMR: 'ريال عماني', JOD: 'دينار أردني'
 };
 
-// ─── ترحيل قائمة العملات من صيغة قديمة (سلاسل) إلى كائنات ──────
+// ─── ترحيل صيغة قديمة (سلاسل → كائنات) ──────────────────────────
 export function normalizeCurrencies() {
   APP_SETTINGS.currencies = (APP_SETTINGS.currencies || []).map(c =>
     typeof c === 'string'
@@ -23,7 +24,7 @@ export function normalizeCurrencies() {
   );
 }
 
-// ─── تحميل الإعدادات من Supabase أو localStorage ───────────────
+// ─── تحميل الإعدادات ────────────────────────────────────────────
 export async function loadAppSettings() {
   try {
     const rows = await sbGet('app_settings', '?limit=1');
@@ -37,15 +38,15 @@ export async function loadAppSettings() {
       }
       conn.settingsBackend = 'supabase';
     } else {
-      // لا يوجد صف لهذا المستخدم — أنشئ واحدًا
       await sbPost('app_settings', [{ value: APP_SETTINGS }]);
       conn.settingsBackend = 'supabase';
     }
     normalizeCurrencies();
     return;
-  } catch (e) { /* الجدول غير موجود — fallback */ }
+  } catch (e) {
+    // الجدول غير موجود → fallback
+  }
 
-  // Fallback: localStorage
   conn.settingsBackend = 'local';
   try {
     const raw = localStorage.getItem('appSettings');
@@ -58,7 +59,7 @@ export async function loadAppSettings() {
   normalizeCurrencies();
 }
 
-// ─── حفظ الإعدادات ─────────────────────────────────────────────
+// ─── حفظ الإعدادات ──────────────────────────────────────────────
 export async function persistAppSettings() {
   if (conn.settingsBackend === 'supabase') {
     try {
@@ -75,14 +76,14 @@ export async function persistAppSettings() {
         return;
       }
     } catch (e) {
-      console.warn('persistAppSettings supabase failed, falling back to local:', e.message);
+      console.warn('persistAppSettings failed, falling back to local:', e.message);
       conn.settingsBackend = 'local';
     }
   }
   try { localStorage.setItem('appSettings', JSON.stringify(APP_SETTINGS)); } catch (e) {}
 }
 
-// ─── ملء قوائم العملات في النماذج ─────────────────────────────
+// ─── ملء قوائم العملات ──────────────────────────────────────────
 export function populateCurrencySelect(id) {
   const sel = document.getElementById(id);
   if (!sel) return;
@@ -100,16 +101,15 @@ export function populateAllCurrencySelects() {
     .forEach(populateCurrencySelect);
 }
 
-// ─── تحديث وسوم "<span class="cur-unit">" في كامل الصفحة ──────
 export function updateCurrencyLabels() {
   document.querySelectorAll('.cur-unit').forEach(el => el.textContent = baseCur());
 }
 
-// ─── إضافة عملة جديدة ──────────────────────────────────────────
+// ─── إضافة/تعديل/حذف عملة ────────────────────────────────────────
 export function addSettingsCurrency() {
   const code = document.getElementById('st-new-currency-code').value.trim().toUpperCase();
   const name = document.getElementById('st-new-currency-name').value.trim();
-  if (!code || code.length < 3) return alert('أدخل كود عملة صحيح (3 أحرف مثل USD)');
+  if (!code || code.length < 3) return alert('أدخل كود عملة صحيح (3 أحرف)');
   if (!name) return alert('أدخل اسم العملة');
   if (currencyCodes().includes(code)) return alert('العملة موجودة بالفعل');
   APP_SETTINGS.currencies.push({ code, name });
@@ -121,7 +121,6 @@ export function addSettingsCurrency() {
   if (window.toast) window.toast('تمت الإضافة');
 }
 
-// ─── تعديل اسم عملة ────────────────────────────────────────────
 export function renameSettingsCurrency(code, newName) {
   newName = (newName || '').trim();
   const entry = APP_SETTINGS.currencies.find(c => c.code === code);
@@ -131,7 +130,6 @@ export function renameSettingsCurrency(code, newName) {
   populateAllCurrencySelects();
 }
 
-// ─── حذف عملة ──────────────────────────────────────────────────
 export function removeSettingsCurrency(code) {
   if (code === baseCur()) return alert('لا يمكن حذف العملة الأساسية الحالية');
   if (!confirm('حذف عملة ' + code + ' من القائمة؟')) return;
@@ -141,11 +139,10 @@ export function removeSettingsCurrency(code) {
   populateAllCurrencySelects();
 }
 
-// ─── callback يُسجِّله main.js لإعادة التحميل عند تغيير العملة ──
+// ─── حفظ الإعدادات العامة ────────────────────────────────────────
 let _onSettingsChanged = null;
 export function setSettingsChangeHandler(fn) { _onSettingsChanged = fn; }
 
-// ─── حفظ الإعدادات العامة ──────────────────────────────────────
 export async function saveGeneralSettings() {
   const oldBase = baseCur();
   APP_SETTINGS.exchange_name = document.getElementById('st-exchange-name').value.trim();
@@ -163,7 +160,6 @@ export async function saveGeneralSettings() {
   }
 }
 
-// ─── حفظ مفتاح GoldAPI.io ──────────────────────────────────────
 export function saveGoldApiKey() {
   const key = document.getElementById('st-goldapi-key').value.trim();
   APP_SETTINGS.goldapi_key = key;
@@ -171,7 +167,7 @@ export function saveGoldApiKey() {
   if (window.toast) window.toast(key ? 'تم حفظ المفتاح' : 'تم مسح المفتاح');
 }
 
-// ─── قوائم أنواع المعادن حسب العملة الأساسية ──────────────────
+// ─── قوائم أنواع المعادن حسب العملة الأساسية ────────────────────
 export const METAL_TYPES_BY_CURRENCY = {
   EGP:     ['ذهب 24','ذهب 21','ذهب 18','جنيه ذهب','سبيكة ذهب','فضة'],
   SAR:     ['ذهب 24 قيراط','ذهب 22 قيراط','ذهب 21 قيراط','ذهب 18 قيراط','سبيكة ذهب','فضة'],
@@ -202,7 +198,6 @@ export function onMetalTypeChange() {
   const customEl = document.getElementById('emb-metal-custom');
   if (!sel || !customEl) return;
   customEl.classList.toggle('hidden', sel.value !== '__custom__');
-  // نُطلق حدث مخصص بدل استدعاء updateMetalBuyPreview مباشرة (داخل النطاق الصحيح)
   document.dispatchEvent(new CustomEvent('metalTypeChange'));
 }
 
@@ -235,13 +230,13 @@ export function renderSettings() {
   if (modeEl) {
     modeEl.innerHTML = conn.settingsBackend === 'supabase'
       ? '<span style="color:var(--green)">✓ الإعدادات متزامنة عبر قاعدة البيانات على كل أجهزتك</span>'
-      : '<span style="color:var(--gold)">⚠ الإعدادات محفوظة على هذا الجهاز فقط. تأكد من تشغيل schema.sql.</span>';
+      : '<span style="color:var(--gold)">⚠ الإعدادات محفوظة على هذا الجهاز فقط.</span>';
   }
 
   renderSchemaAlert();
 }
 
-// ─── تنبيه أعمدة قاعدة البيانات الناقصة ────────────────────────
+// ─── تنبيه أعمدة ناقصة ──────────────────────────────────────────
 const COLUMN_TYPE_HINTS = { currency: 'text', market: 'text', price_currency: 'text' };
 
 export function renderSchemaAlert() {
@@ -249,7 +244,7 @@ export function renderSchemaAlert() {
   if (!el) return;
   const warnings = window.__schemaWarnings ? [...window.__schemaWarnings] : [];
   if (!warnings.length) {
-    el.innerHTML = '<span style="color:var(--green)">✓ لا توجد تنبيهات — قاعدة البيانات متوافقة مع كل ميزات التطبيق الحالية.</span>';
+    el.innerHTML = '<span style="color:var(--green)">✓ لا توجد تنبيهات — قاعدة البيانات متوافقة.</span>';
     return;
   }
   const alterLines = warnings.map(w => {
