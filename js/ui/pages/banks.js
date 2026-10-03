@@ -1,5 +1,5 @@
 // ══════════════════════════════════════════════════════════════════
-//  pages/banks.js — الحسابات البنكية
+//  pages/banks.js — الحسابات البنكية + Undo
 // ══════════════════════════════════════════════════════════════════
 import { DB, UI, editCtx } from '../../state.js';
 import { N2, fmt, fmtN, pct, today, getBankColor, toEGP, escapeHtml, sign, cls, periodStart } from '../../core/utils.js';
@@ -7,10 +7,12 @@ import { sbPost, sbPatch, sbDel, sbRpc } from '../../core/supabase.js';
 import { toast } from '../toast.js';
 import { deleteWithUndo } from '../undo.js';
 import { kpi, svgIcon, typeTag, populateSelect, fmtBankAmt } from '../shared.js';
-import { openModal, closeModal, quickDep, quickWit } from '../modals.js';
+import { openModal, closeModal } from '../modals.js';
 import { calcTotals } from '../../domain/calc.js';
 
 const reload = () => window.loadAll?.();
+
+// ══════════════════ Render ══════════════════
 
 export function renderBanks() {
   const T = calcTotals();
@@ -146,7 +148,7 @@ export function renderBankTable() {
       const isIn = CREDIT.includes(t.type);
       const bColor = b ? getBankColor(b.id) : 'var(--muted)';
       const noteLines = (t.notes || '').split('\n');
-      return `<tr style="border-right:2px solid ${bColor}22">
+      return `<tr data-row-id="${t.id}" style="border-right:2px solid ${bColor}22">
         <td style="font-size:12px">${t.date}</td>
         <td>${b ? `<span style="display:inline-flex;align-items:center;gap:4px;font-size:12px"><span style="width:8px;height:8px;border-radius:50%;background:${bColor};flex-shrink:0"></span>${escapeHtml(b.name)}</span>` : '<span class="muted">— محذوف —</span>'}</td>
         <td>${typeTag(t.type)}</td>
@@ -175,7 +177,7 @@ export function renderBankTable() {
   document.getElementById('bank-txns-tbody').innerHTML = txns.length ? txns.map(t => {
     const isIn = CREDIT.includes(t.type);
     const noteLines = (t.notes || '').split('\n');
-    return `<tr style="border-right:2px solid ${bankColor}22">
+    return `<tr data-row-id="${t.id}" style="border-right:2px solid ${bankColor}22">
       <td style="font-size:12px">${t.date}</td><td>${typeTag(t.type)}</td>
       <td>${t.category ? `<span class="badge badge-gray" style="font-size:9.5px">${escapeHtml(t.category)}</span>` : ''}</td>
       <td class="td-num ${isIn ? 'pos' : 'neg'}" style="direction:ltr;font-weight:700">${isIn ? '+' : '-'}${fmtBankAmt(t.amount, t.bank_id)}</td>
@@ -188,6 +190,8 @@ export function renderBankTable() {
     </tr>`;
   }).join('') : `<tr><td colspan="7" style="text-align:center;padding:24px;color:var(--muted)">لا توجد عمليات في الفترة</td></tr>`;
 }
+
+// ══════════════════ Actions ══════════════════
 
 export async function saveBank() {
   const id = document.getElementById('eb-id').value;
@@ -250,21 +254,27 @@ export async function toggleBankStatus(id) {
   const newStatus = b.is_active === false;
   const msg = newStatus ? `تفعيل حساب "${b.name}"؟` : `أرشفة حساب "${b.name}"؟`;
   if (!confirm(msg)) return;
-  try { await sbPatch('banks', id, { is_active: newStatus }); toast(newStatus ? 'تم التفعيل' : 'تم الأرشفة'); await reload(); }
-  catch (e) { toast('خطأ: ' + e.message, false); }
+  try {
+    await sbPatch('banks', id, { is_active: newStatus });
+    toast(newStatus ? 'تم التفعيل' : 'تم الأرشفة');
+    await reload();
+  } catch (e) { toast('خطأ: ' + e.message, false); }
 }
 
+// ✅ Undo: حذف بتأجيل + زر تراجع
 export async function deleteBank(id) {
   const b = DB.banks.find(x => x.id === id);
   if (!b) return;
   await deleteWithUndo('banks', id, b.name, async () => {
-    // قبل الحذف الفعلي: أرشِف الحركات (soft delete)
+    // قبل الحذف الفعلي: أرشِف كل حركات البنك
     try {
       const txns = DB.bankTxns.filter(t => t.bank_id === id);
       for (const t of txns) {
         await sbPatch('bank_transactions', t.id, { deleted_at: new Date().toISOString() });
       }
-    } catch (e) { /* نتجاهل */ }
+    } catch (e) {
+      console.warn('فشل أرشفة الحركات:', e);
+    }
   });
 }
 
@@ -335,7 +345,6 @@ export async function doTransfer() {
   if (!from || !to) return alert('أحد الحسابين غير موجود');
   const fromCur = from.currency || 'EGP', toCur = to.currency || 'EGP';
 
-  // تحويل صحيح عبر EGP
   let toAmt = amt;
   if (fromCur !== toCur) {
     const egpAmount = N2(amt) * (fromCur === 'EGP' ? 1 : (DB.exchangeRates.find(x => x.currency === fromCur)?.rate || 1));
@@ -354,11 +363,13 @@ export async function doTransfer() {
   } catch (e) { toast('خطأ: ' + e.message, false); }
 }
 
+// ✅ Undo: حذف حركة بنكية
 export async function deleteBankTxn(id) {
   const txn = DB.bankTxns.find(t => t.id === id);
   if (!txn) return;
-  await deleteWithUndo('bank_transactions', id, 'حركة بنكية', async () => {
-    // احذف الحركة المرتبطة إن وُجدت (نفس التحويل)
+  const label = (txn.notes || '').split('\n')[0] || txn.type;
+  await deleteWithUndo('bank_transactions', id, label, async () => {
+    // احذف الحركة المرتبطة إن وُجدت
     if (txn.linked_transfer_id) {
       try { await sbDel('bank_transactions', txn.linked_transfer_id); } catch (e) {}
     }
