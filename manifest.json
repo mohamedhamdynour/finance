@@ -1,1 +1,35 @@
-
+{
+  "name": "Finance Portfolio Pro",
+  "short_name": "Ma7fatzy",
+  "description": "نظام إدارة المحفظة المالية الشخصية — أسهم، معادن، شهادات، ديون، زكاة",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "background_color": "#0f1729",
+  "theme_color": "#1a56db",
+  "lang": "ar",
+  "dir": "rtl",
+  "categories": ["finance", "productivity"],
+  "icons": [
+    {
+      "src": "icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    },
+    {
+      "src": "icon-maskable.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "maskable"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "لوحة التحكم",
+      "short_name": "الرئيسية",
+      "url": "./index.html#dashboard"
+    }
+  ]
+}
