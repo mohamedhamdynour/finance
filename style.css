@@ -834,3 +834,28 @@ body.dark .skel {
 /* Global search scrollbar */
 #global-search-results::-webkit-scrollbar { width: 4px; }
 #global-search-results::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
+
+
+/* ══════════════════════════════════════════════ */
+/*  NETWORK INDICATOR                             */
+/* ══════════════════════════════════════════════ */
+@media (max-width: 700px) {
+  #network-indicator { display: none !important; }
+}
+
+/* حالة "غير متصل" — شريط أصفر خفيف في أعلى الصفحة */
+body.offline::before {
+  content: '';
+  position: fixed;
+  top: 0; left: 0; right: 0;
+  height: 3px;
+  background: linear-gradient(90deg, #d97706, #f59e0b, #d97706);
+  background-size: 200% 100%;
+  animation: offlineShimmer 2s ease-in-out infinite;
+  z-index: 100001;
+  pointer-events: none;
+}
+@keyframes offlineShimmer {
+  0%   { background-position: 0% 0; }
+  100% { background-position: 200% 0; }
+}
