@@ -27,11 +27,17 @@ export function authHeaders() {
 // ─── الطلب الأساسي ─────────────────────────────────────────────
 export async function api(path, method = 'GET', body = null, opts = {}) {
   const fetchOnce = async () => {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 15000); // 15 ثانية timeout
+
+  try {
     const r = await fetch(conn.SB_URL + '/rest/v1/' + path, {
       method,
       headers: authHeaders(),
+      signal: controller.signal,
       ...(body ? { body: JSON.stringify(body) } : {})
     });
+    clearTimeout(timer);
     if (r.status === 204) return null;
     const j = await r.json().catch(() => ({}));
     if (!r.ok) {
@@ -41,7 +47,16 @@ export async function api(path, method = 'GET', body = null, opts = {}) {
       throw err;
     }
     return j;
-  };
+  } catch (e) {
+    clearTimeout(timer);
+    if (e.name === 'AbortError') {
+      const timeoutErr = new Error('انتهت مهلة الاتصال (15 ثانية)');
+      timeoutErr.status = 408;
+      throw timeoutErr;
+    }
+    throw e;
+  }
+};
 
   // لا تُعد المحاولة في عمليات POST/PATCH/DELETE افتراضيًا (لتجنب التكرار)
   // إلا لو المستدعي طلب ذلك صراحةً
