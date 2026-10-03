@@ -20,6 +20,8 @@ import {
 import { showAllSkeletons, hideAllSkeletons } from './ui/skeleton.js';
 import { saveCache, loadCache, applyCacheToDB, clearCache, cacheInfo } from './core/cache.js';
 import { ensureChartLoaded } from './ui/charts.js';
+import { installNetworkIndicator, setupNetworkToasts } from './ui/network-indicator.js';
+import { isOnline } from './core/network.js';
 
 // ─── 2) UI Shared ──────────────────────────────────────────────
 import { toast, installToastGlobal } from './ui/toast.js';
@@ -208,6 +210,20 @@ async function runIntegrityCheck() {
 //  loadAll — نقطة التحميل المركزية
 // ══════════════════════════════════════════════════════════════════
 async function loadAll(opts = {}) {
+  if (!isOnline()) {
+  console.log('[loadAll] الجهاز غير متصل — تم استخدام الكاش');
+  const cache = await loadCache();
+  if (cache) {
+    applyCacheToDB(cache.data);
+    renderPage();
+    updateNotificationBell();
+    const syncEl = document.getElementById('sidebar-sync');
+    if (syncEl) syncEl.innerHTML = '<span class="sync-dot err"></span> غير متصل — عرض من الكاش';
+  }
+  hideAllSkeletons();
+  return;
+}
+  
   const silent = opts.silent === true; // بدون skeletons (عند التحديث السريع)
   const useCache = opts.useCache !== false; // استخدم الكاش افتراضياً
 
@@ -305,7 +321,11 @@ async function loadAll(opts = {}) {
     console.error('loadAll error:', e);
     hideAllSkeletons();
     const msg = e.message || 'خطأ غير معروف';
+    if (!isOnline()) {
+    toast('لا يوجد اتصال — التطبيق يعمل من الكاش', false);
+    } else {
     toast('خطأ في الاتصال: ' + msg, false);
+    }
 
     const syncEl = document.getElementById('sidebar-sync');
     if (syncEl) syncEl.innerHTML = '<span class="sync-dot err"></span> ' + msg.slice(0, 40);
@@ -543,5 +563,7 @@ if ('serviceWorker' in navigator && !navigator.serviceWorker.controller) {
     navigator.serviceWorker.register('sw.js', { scope: './' }).catch(() => {});
   });
 }
+installNetworkIndicator();
+setupNetworkToasts();
 
 console.log('[main] Portfolio Pro bootstrapped');
