@@ -273,7 +273,7 @@ async function loadAll(opts = {}) {
 
     const [banks, bankTxns, stockTxns, stockPrices, metalTxns, metalPrices,
        certs, dividends, recurring, goals, exRates, snapshots, debts, debtPayments,
-       installments, installmentPayments] =
+       installments, installmentPayments, attachments] =
   await Promise.all([
     sbGet('banks', '?order=id&deleted_at=is.null'),
     sbGet('bank_transactions', '?order=date.desc,id.desc&deleted_at=is.null'),
@@ -292,6 +292,7 @@ async function loadAll(opts = {}) {
     sbGet('installments', '?order=id&deleted_at=is.null'),
     sbGet('installment_payments', '?order=date.desc&deleted_at=is.null'),
     sbGet('attachments', '?order=created_at.desc&deleted_at=is.null'),
+    
   ]);
 
     DB.banks = banks;
