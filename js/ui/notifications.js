@@ -1,5 +1,6 @@
 // ══════════════════════════════════════════════════════════════════
-//  notifications.js — لوحة الإشعارات (Bell + Panel)
+//  notifications.js — لوحة الإشعارات
+//  ⚠️ يستثني الشهادات المُستردّة (matured_at)
 // ══════════════════════════════════════════════════════════════════
 import { DB } from '../state.js';
 import { N2, baseCur, escapeHtml, today } from '../core/utils.js';
@@ -8,38 +9,117 @@ import { calcTotals, nextRecDate } from '../domain/calc.js';
 export function buildNotifications() {
   const notes = [];
   const now = new Date();
+  const todayStr = today();
   const T = calcTotals();
 
+  // ═══ الشهادات ═══
   DB.certs.forEach(c => {
+    // ✅ تجاوز الشهادات المُستردّة
+    if (c.matured_at) return;
+
     const mat = new Date(c.maturity_date);
     const days = Math.ceil((mat - now) / 86400000);
-    if (days < 0) notes.push({ type: 'danger', icon: 'alert-circle', title: 'شهادة منتهية', body: `${escapeHtml(c.name)} انتهت منذ ${Math.abs(days)} يوم` });
-    else if (days <= 30) notes.push({ type: 'warn', icon: 'clock', title: 'شهادة قريبة الاستحقاق', body: `${escapeHtml(c.name)} تستحق خلال ${days} يوم` });
+
+    if (days < 0) {
+      // انتهت ولم تُستردّ بعد
+      if (c.bank_id) {
+        notes.push({
+          type: 'warn',
+          icon: 'alert-circle',
+          title: 'شهادة بحاجة للاسترداد',
+          body: `${escapeHtml(c.name)} انتهت منذ ${Math.abs(days)} يوم — جاهزة للاسترداد`
+        });
+      } else {
+        notes.push({
+          type: 'danger',
+          icon: 'alert-circle',
+          title: 'شهادة منتهية بدون حساب',
+          body: `${escapeHtml(c.name)} — لا يوجد حساب مرتبط للاسترداد`
+        });
+      }
+    } else if (days <= 30) {
+      notes.push({
+        type: 'warn',
+        icon: 'clock',
+        title: 'شهادة قريبة الاستحقاق',
+        body: `${escapeHtml(c.name)} تستحق خلال ${days} يوم`
+      });
+    }
+
     const rem = Math.max(0, +c.total_interest - (+c.interest_paid));
-    if (rem / Math.max(1, +c.total_interest) > 0.8 && days > 0) notes.push({ type: 'info', icon: 'dollar-sign', title: 'عائد شهادة مستحق', body: `${escapeHtml(c.name)}: عائد متبقي ${rem.toFixed(0)} ${baseCur()}` });
+    if (rem / Math.max(1, +c.total_interest) > 0.8 && days > 0) {
+      notes.push({
+        type: 'info',
+        icon: 'dollar-sign',
+        title: 'عائد شهادة مستحق',
+        body: `${escapeHtml(c.name)}: عائد متبقي ${rem.toFixed(0)} ${baseCur()}`
+      });
+    }
   });
 
+  // ═══ البنوك (أرصدة منخفضة) ═══
   DB.banks.filter(b => +b.min_balance > 0 && +b.balance < +b.min_balance).forEach(b => {
-    notes.push({ type: 'warn', icon: 'credit-card', title: 'رصيد منخفض', body: `${escapeHtml(b.name)}: الرصيد ${b.balance} أقل من الحد الأدنى ${b.min_balance}` });
+    notes.push({
+      type: 'warn',
+      icon: 'credit-card',
+      title: 'رصيد منخفض',
+      body: `${escapeHtml(b.name)}: الرصيد ${b.balance} أقل من الحد الأدنى ${b.min_balance}`
+    });
   });
 
+  // ═══ الديون المتأخرة ═══
   DB.debts.filter(d => d.due_date && new Date(d.due_date) < now && +d.remaining > 0).forEach(d => {
     const daysLate = Math.ceil((now - new Date(d.due_date)) / 86400000);
-    notes.push({ type: 'danger', icon: 'alert-triangle', title: 'دين/التزام متأخر', body: `${escapeHtml(d.name)}: متأخر ${daysLate} يوم | متبقي ${(+d.remaining).toFixed(0)} ${baseCur()}` });
+    notes.push({
+      type: 'danger',
+      icon: 'alert-triangle',
+      title: 'دين/التزام متأخر',
+      body: `${escapeHtml(d.name)}: متأخر ${daysLate} يوم | متبقي ${(+d.remaining).toFixed(0)} ${baseCur()}`
+    });
   });
 
+  // ═══ ديون قريبة الاستحقاق ═══
   DB.debts.filter(d => d.due_date && +d.remaining > 0).forEach(d => {
     const days = Math.ceil((new Date(d.due_date) - now) / 86400000);
-    if (days > 0 && days <= 30) notes.push({ type: 'warn', icon: 'calendar', title: 'موعد سداد قريب', body: `${escapeHtml(d.name)}: يستحق خلال ${days} يوم` });
+    if (days > 0 && days <= 30) {
+      notes.push({
+        type: 'warn',
+        icon: 'calendar',
+        title: 'موعد سداد قريب',
+        body: `${escapeHtml(d.name)}: يستحق خلال ${days} يوم`
+      });
+    }
   });
 
-  DB.recurring.filter(r => nextRecDate(r) <= today()).forEach(r => {
-    notes.push({ type: 'info', icon: 'refresh-cw', title: 'عملية متكررة مستحقة', body: `${escapeHtml(r.name)} (${escapeHtml(r.type)}) بقيمة ${r.amount} ${baseCur()}` });
+  // ═══ عمليات متكررة مستحقة ═══
+  DB.recurring.filter(r => nextRecDate(r) <= todayStr).forEach(r => {
+    notes.push({
+      type: 'info',
+      icon: 'refresh-cw',
+      title: 'عملية متكررة مستحقة',
+      body: `${escapeHtml(r.name)} (${escapeHtml(r.type)}) بقيمة ${r.amount} ${baseCur()}`
+    });
   });
 
+  // ═══ تنبيهات خسائر ═══
   const { pnlStocks, pnlMetals, stocksCost, metalsCost } = T;
-  if (stocksCost > 0 && pnlStocks / stocksCost < -0.15) notes.push({ type: 'warn', icon: 'trending-down', title: 'خسارة في الأسهم', body: `خسارة ${(pnlStocks / stocksCost * 100).toFixed(1)}%` });
-  if (metalsCost > 0 && pnlMetals / metalsCost < -0.10) notes.push({ type: 'warn', icon: 'trending-down', title: 'خسارة في المعادن', body: `خسارة ${(pnlMetals / metalsCost * 100).toFixed(1)}%` });
+  if (stocksCost > 0 && pnlStocks / stocksCost < -0.15) {
+    notes.push({
+      type: 'warn',
+      icon: 'trending-down',
+      title: 'خسارة في الأسهم',
+      body: `خسارة ${(pnlStocks / stocksCost * 100).toFixed(1)}%`
+    });
+  }
+  if (metalsCost > 0 && pnlMetals / metalsCost < -0.10) {
+    notes.push({
+      type: 'warn',
+      icon: 'trending-down',
+      title: 'خسارة في المعادن',
+      body: `خسارة ${(pnlMetals / metalsCost * 100).toFixed(1)}%`
+    });
+  }
+
   return notes;
 }
 
@@ -93,7 +173,6 @@ export function renderNotifications() {
     : `<div style="padding:24px;text-align:center;color:var(--muted);font-size:12px">لا توجد تنبيهات حالياً</div>`;
 }
 
-// إغلاق اللوحة عند النقر خارجها
 document.addEventListener('click', e => {
   const panel = document.getElementById('notif-panel');
   const bell = document.getElementById('notif-bell');
