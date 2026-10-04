@@ -1,5 +1,5 @@
 // ══════════════════════════════════════════════════════════════════
-//  shared.js — دوال مساعدة للـ UI (KPIs، قوائم، تنسيقات جدول)
+//  shared.js — دوال UI المشتركة
 // ══════════════════════════════════════════════════════════════════
 import { DB, UI, CHARTS, marketCtx } from '../state.js';
 import { N2, fmt, fmtN, pct, periodStart, periodEnd, getBankColor, escapeHtml } from '../core/utils.js';
@@ -26,7 +26,7 @@ export function svgIcon(paths, w = 17) {
   return `<svg width="${w}" height="${w}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${paths}</svg>`;
 }
 
-// ─── Type Tag (badge حسب نوع الحركة) ──────────────────────────
+// ─── Type Tag ──────────────────────────────────────────────────
 export function typeTag(type) {
   const m = {
     'إيداع': 'tag-dep', 'سحب': 'tag-wit',
@@ -38,12 +38,12 @@ export function typeTag(type) {
   return `<span class="tag ${m[type] || 'tag-open'}">${escapeHtml(type)}</span>`;
 }
 
-// ─── Bank <option> HTML ───────────────────────────────────────
+// ─── Bank options ─────────────────────────────────────────────
 export function bankOptHtml(b) {
   if (b.is_active === false) return '';
   const cur = b.currency || 'EGP';
   const color = getBankColor(b.id);
-  return `<option value="${b.id}" data-color="${color}">⬤ ${escapeHtml(b.name)}${b.bank_code ? ' (' + escapeHtml(b.bank_code) + ')' : ''} | ${fmtN(N2(b.balance), 2)} ${escapeHtml(cur)}</option>`;
+  return `<option value="${b.id}" data-color="${color}">${escapeHtml(b.name)}${b.bank_code ? ' (' + escapeHtml(b.bank_code) + ')' : ''} | ${fmtN(N2(b.balance), 2)} ${escapeHtml(cur)}</option>`;
 }
 
 export function bankOptHtmlAll(b) {
@@ -51,12 +51,11 @@ export function bankOptHtmlAll(b) {
   return `<option value="${b.id}">${b.is_active === false ? '[مؤرشف] ' : ''}${escapeHtml(b.name)}${b.bank_code ? ' (' + escapeHtml(b.bank_code) + ')' : ''} | ${fmtN(N2(b.balance), 2)} ${escapeHtml(cur)}</option>`;
 }
 
-// ─── Certificate <option> HTML ────────────────────────────────
 export function certOptHtml(c) {
   return `<option value="${c.id}">${escapeHtml(c.name)} — ${escapeHtml(c.bank_name || '')} | ${fmt(c.amount)}</option>`;
 }
 
-// ─── Populate a <select> with banks ───────────────────────────
+// ─── Populate Select ──────────────────────────────────────────
 export function populateSelect(id, extra = '') {
   const el = document.getElementById(id);
   if (!el) return;
@@ -77,7 +76,7 @@ export function populateSelect(id, extra = '') {
   applyColor();
 }
 
-// ─── Preview Box (تستخدمه كل النماذج) ─────────────────────────
+// ─── Preview Box ──────────────────────────────────────────────
 export function previewBox(rows, color = 'var(--green-l)', borderColor = 'var(--green)') {
   const visible = rows.filter(Boolean);
   return `<div class="preview-box" style="border-color:${borderColor};margin-top:10px">${
@@ -85,19 +84,43 @@ export function previewBox(rows, color = 'var(--green-l)', borderColor = 'var(--
   }</div>`;
 }
 
-// ─── Cert Alerts (شهادات قريبة/منتهية) ────────────────────────
+// ══════════════════ Cert Alerts (Updated) ══════════════════
+
+/**
+ * يُرجع تنبيهات الشهادات.
+ * - soon: نشطة وتستحق خلال 30 يوم
+ * - expired: انتهت ولم تُستردّ بعد (بحاجة للاسترداد)
+ * - matured: استُردّت بالفعل (لا تنبيه)
+ *
+ * ⚠️ الشهادات المُستردّة (matured_at) لا تظهر في soon/expired
+ */
 export function getCertAlerts() {
-  const now = new Date(), soon = [], expired = [];
+  const now = new Date();
+  const todayStr = now.toISOString().slice(0, 10);
+  const soon = [], expired = [], matured = [];
+
   DB.certs.forEach(c => {
+    // ✅ الشهادات المُستردّة — لا تنبيهات
+    if (c.matured_at) {
+      matured.push({ ...c });
+      return;
+    }
+
     const mat = new Date(c.maturity_date);
     const days = Math.ceil((mat - now) / 86400000);
-    if (days < 0) expired.push({ ...c, daysLeft: days });
-    else if (days <= 30) soon.push({ ...c, daysLeft: days });
+
+    if (days < 0) {
+      // انتهت ولم تُستردّ → بحاجة للاسترداد
+      expired.push({ ...c, daysLeft: days });
+    } else if (days <= 30) {
+      soon.push({ ...c, daysLeft: days });
+    }
   });
-  return { soon, expired };
+
+  return { soon, expired, matured };
 }
 
-// ─── Badge counts في القائمة الجانبية ─────────────────────────
+// ─── Badges ──────────────────────────────────────────────────
 export function updateBadges() {
   const { soon, expired } = getCertAlerts();
   const total = soon.length + expired.length;
@@ -118,13 +141,11 @@ export function setBankSort(dir) {
   if (typeof window.renderBanks === 'function') window.renderBanks();
 }
 
-// ─── فلتر حركات البنك ─────────────────────────────────────────
 export function setBankTxnFilter(v) {
   UI.bankTxnFilter = v;
   if (typeof window.renderBankTable === 'function') window.renderBankTable();
 }
 
-// ─── تبديل تبويب البنك ────────────────────────────────────────
 export function switchBankTab(id) {
   UI.activeBankId = id;
   UI.bankTxnFilter = 'ALL';
@@ -134,7 +155,6 @@ export function switchBankTab(id) {
   if (typeof window.renderBankTable === 'function') window.renderBankTable();
 }
 
-// ─── تبديل سوق الأسهم ─────────────────────────────────────────
 export function setStockMarket(market, el) {
   marketCtx.activeStockMarket = market;
   document.querySelectorAll('#page-stocks .tab[data-market]').forEach(t => {
@@ -150,7 +170,7 @@ export function getReportPeriodBounds() {
   return { pStart: periodStart(p), pEnd: periodEnd(p) };
 }
 
-// ─── اختيار الفترة العامة من الأعلى ───────────────────────────
+// ─── اختيار الفترة العامة ───────────────────────────────────
 export function setPeriodFromSelect(p) {
   UI.globalPeriod = p;
   localStorage.setItem('globalPeriod', p);
@@ -170,14 +190,14 @@ export function applyGlobalCustomRange() {
   if (typeof window.renderPage === 'function') window.renderPage();
 }
 
-// ─── تنسيق مبلغ بنكي (يستخدم عملة الحساب) ────────────────────
+// ─── تنسيق مبلغ بنكي ─────────────────────────────────────────
 export function fmtBankAmt(amount, bankId) {
   const bank = DB.banks.find(b => b.id === bankId);
   const cur = bank?.currency || 'EGP';
   return `${new Intl.NumberFormat('ar-EG', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(+amount || 0)} ${cur}`;
 }
 
-// ─── Insights Card (أفضل/أسوأ أداء) ───────────────────────────
+// ─── Insights Card ────────────────────────────────────────────
 export function renderInsightsCard(items, label, colorFn, valueFn, nameFn) {
   if (!items.length) return '';
   const sorted = [...items].sort((a, b) => valueFn(b) - valueFn(a));
@@ -200,7 +220,7 @@ export function renderInsightsCard(items, label, colorFn, valueFn, nameFn) {
   </div>`;
 }
 
-// ─── معرفة الصفحة الحالية ─────────────────────────────────────
+// ─── active market ────────────────────────────────────────────
 export function activeMarket() {
   return marketCtx.activeStockMarket || 'ALL';
 }
