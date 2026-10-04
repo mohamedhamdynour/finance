@@ -1,11 +1,10 @@
 // ══════════════════════════════════════════════════════════════════
 //  main.js — نقطة الدخول والمنسّق العام
-//  يُثبِّت كل الوحدات، يربط window.*، ويشغّل التطبيق.
 // ══════════════════════════════════════════════════════════════════
 
 // ─── 1) Core ────────────────────────────────────────────────────
 import { DB, UI, APP_SETTINGS, CHARTS, conn, editCtx, marketCtx } from './state.js';
-import { N2, fmt, fmtN, fmtK, pct, today, baseCur, escapeHtml, toEGP, periodStart, getBankColor, debounce } from './core/utils.js';
+import { N2, fmt, fmtN, fmtK, pct, today, baseCur, escapeHtml, toEGP, periodStart, getBankColor } from './core/utils.js';
 import { sbGet, sbPost, sbPatch, sbDel, sbUpsert, sbRpc, sbPatchBy } from './core/supabase.js';
 import {
   initAuthGate, connectSupabase, disconnectSupabase, doLogin, doSignup, doLogout,
@@ -51,6 +50,7 @@ import { openCSVImport, installCSVHandlers } from './ui/csv-import.js';
 // ─── 3) Domain ──────────────────────────────────────────────────
 import { calcTotals, nextRecDate } from './domain/calc.js';
 import { autoApplyRecurring, notifyAutoRecurringResult } from './domain/auto-recurring.js';
+import { processMaturedCerts, detectMaturedCerts } from './domain/cert-maturation.js';
 import { extractText, parseReceipt } from './domain/ocr.js';
 
 // ─── 4) Pages ───────────────────────────────────────────────────
@@ -75,14 +75,18 @@ import * as taxPage from './ui/pages/tax.js';
 import * as auditPage from './ui/pages/audit.js';
 
 // ══════════════════════════════════════════════════════════════════
-//  Icon helpers (SVG فقط، لا Emoji)
+//  Icon helpers
 // ══════════════════════════════════════════════════════════════════
 const ICON = {
   sun:    '<circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/>',
   moon:   '<path d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z"/>',
   help:   '<circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 015.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/>',
   code:   '<polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/>',
-  copy:   '<rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/>'
+  copy:   '<rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/>',
+  bell:   '<path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/>',
+  speaker:'<polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M19.07 4.93a10 10 0 010 14.14M15.54 8.46a5 5 0 010 7.07"/>',
+  check:  '<polyline points="20 6 9 17 4 12"/>',
+  x:      '<circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/>'
 };
 
 const svg = (path, size = 16, extra = '') =>
@@ -199,7 +203,6 @@ function renderPage() {
 // ══════════════════════════════════════════════════════════════════
 //  Help & SQL Modals
 // ══════════════════════════════════════════════════════════════════
-
 function openHelpModal() {
   const titleEl = document.getElementById('edit-modal-title');
   const bodyEl = document.getElementById('edit-modal-body');
@@ -216,7 +219,7 @@ function openHelpModal() {
           ${svg('<circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/>', 16)}
           ما هو هذا التطبيق؟
         </h3>
-        <p style="color:var(--muted)">نظام شخصي لإدارة محفظتك المالية بالكامل من المتصفح. يعمل مباشرة مع قاعدة بياناتك على Supabase بدون أي خادم وسيط — بياناتك ملكك وحدك.</p>
+        <p style="color:var(--muted)">نظام شخصي لإدارة محفظتك المالية بالكامل من المتصفح. يعمل مباشرة مع قاعدة بياناتك على Supabase بدون أي خادم وسيط.</p>
       </section>
 
       <section style="margin-bottom:18px">
@@ -228,7 +231,7 @@ function openHelpModal() {
           <li>تتبع الحسابات البنكية والحركات بالتفصيل</li>
           <li>إدارة حيازات الأسهم والصناديق مع حساب الأرباح والخسائر</li>
           <li>تتبع المعادن الثمينة (ذهب، فضة، ...) بالوزن والسعر</li>
-          <li>الشهادات الادخارية مع جدول دفعات العائد</li>
+          <li>الشهادات الادخارية مع استرداد تلقائي عند الاستحقاق</li>
           <li>الديون والأقساط مع التنبيهات التلقائية</li>
           <li>التحليل: المخاطر، التوقعات، المقارنات الزمنية</li>
           <li>حساب الزكاة الشرعية والضرائب</li>
@@ -240,7 +243,7 @@ function openHelpModal() {
 
       <section style="margin-bottom:18px">
         <h3 style="font-size:14px;font-weight:900;margin-bottom:8px;color:var(--gold);display:flex;align-items:center;gap:6px">
-          ${svg('<polyline points="20 6 9 17 4 12"/>', 16)}
+          ${svg(ICON.check, 16)}
           كيف تبدأ؟
         </h3>
         <ol style="color:var(--muted);padding-right:20px;margin:0">
@@ -301,7 +304,6 @@ async function openSqlModal() {
   titleEl.innerHTML = svg(ICON.code, 18) + ' كود قاعدة البيانات الكامل';
   saveBtn.style.display = 'none';
   bodyEl.innerHTML = `<div style="text-align:center;padding:40px;color:var(--muted)">
-    ${svg('<circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>', 32, 'style="opacity:.4;margin-bottom:10px"')}
     <div>جاري تحميل الكود...</div>
   </div>`;
 
@@ -317,7 +319,7 @@ async function openSqlModal() {
         <strong style="color:var(--blue)">الخطوات:</strong>
         <ol style="margin:6px 18px 0;padding:0">
           <li>افتح مشروعك في supabase.com</li>
-          <li>اذهب إلى SQL Editor → New query</li>
+          <li>اذهب إلى SQL Editor ← New query</li>
           <li>الصق الكود التالي وشغّله (Run)</li>
         </ol>
       </div>
@@ -327,14 +329,13 @@ async function openSqlModal() {
           نسخ الكود
         </button>
       </div>
-      <pre id="sql-content" style="background:#0f1729;color:#f0f4ff;padding:16px;border-radius:10px;font-size:11px;direction:ltr;text-align:left;overflow:auto;max-height:440px;line-height:1.55;font-family:'SF Mono',Consolas,monospace;border:.5px solid var(--border)">${escapeHtml(sql)}</pre>
+      <pre id="sql-content" class="sql-preview">${escapeHtml(sql)}</pre>
       <div class="form-hint" style="margin-top:10px;text-align:center">
-        ملاحظة: تشغيل الكود يحذف الجداول القديمة ويعيد إنشاءها. خذ نسخة احتياطية أولاً إن لزم.
+        ملاحظة: تشغيل الكود يحذف الجداول القديمة ويعيد إنشاءها. خذ نسخة احتياطية أولاً.
       </div>
     `;
   } catch (e) {
     bodyEl.innerHTML = `<div style="text-align:center;padding:40px;color:var(--red)">
-      ${svg('<circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/>', 32, 'style="opacity:.5;margin-bottom:10px"')}
       <div style="font-weight:700">فشل التحميل: ${escapeHtml(e.message)}</div>
       <div style="font-size:11.5px;color:var(--muted);margin-top:8px">تأكد من وجود ملف <code>schema.sql</code> في جذر المشروع</div>
     </div>`;
@@ -351,9 +352,7 @@ function installHelpAndSqlHandlers() {
     if (navigator.clipboard && navigator.clipboard.writeText) {
       navigator.clipboard.writeText(text).then(() => toast('تم نسخ كود SQL ✓'))
         .catch(() => fallbackCopy(text));
-    } else {
-      fallbackCopy(text);
-    }
+    } else fallbackCopy(text);
   };
   function fallbackCopy(text) {
     const ta = document.createElement('textarea');
@@ -368,7 +367,7 @@ function installHelpAndSqlHandlers() {
 }
 
 // ══════════════════════════════════════════════════════════════════
-//  Push Notifications status
+//  Push Notifications
 // ══════════════════════════════════════════════════════════════════
 async function renderPushStatus() {
   const el = document.getElementById('push-status');
@@ -394,11 +393,10 @@ async function renderPushStatus() {
     const sub = await getCurrentSubscription();
 
     if (perm === 'denied') {
-      el.innerHTML = `<div style="padding:10px;background:var(--red-l);color:var(--red-d);border-radius:8px;font-size:12px">تم رفض الإذن — يمكنك إعادة تفعيله من إعدادات المتصفح</div>`;
+      el.innerHTML = `<div style="padding:10px;background:var(--red-l);color:var(--red-d);border-radius:8px;font-size:12px">تم رفض الإذن — أعد التفعيل من إعدادات المتصفح</div>`;
     } else if (sub) {
       el.innerHTML = `<div style="padding:10px 14px;background:var(--green-l);color:var(--green-d);border-radius:8px;font-size:12px;display:flex;align-items:center;gap:8px">
-        ${svg('<polyline points="20 6 9 17 4 12"/>', 14)}
-        <span>الإشعارات مفعّلة على هذا الجهاز</span>
+        ${svg(ICON.check, 14)} <span>الإشعارات مفعّلة على هذا الجهاز</span>
       </div>`;
     } else {
       el.innerHTML = `<div style="padding:10px;background:var(--surface2);color:var(--muted);border-radius:8px;font-size:12px">لم يتم التفعيل بعد</div>`;
@@ -407,6 +405,37 @@ async function renderPushStatus() {
     console.warn('[push-status]', e.message);
     el.innerHTML = '';
   }
+}
+
+function installPushHandlers() {
+  window.__pushEnable = async () => {
+    try {
+      const { subscribeToPush } = await import('./core/push.js');
+      await subscribeToPush();
+      toast('تم تفعيل الإشعارات ✓');
+      renderPushStatus();
+    } catch (e) {
+      toast('خطأ: ' + e.message, false);
+      renderPushStatus();
+    }
+  };
+
+  window.__pushDisable = async () => {
+    try {
+      const { unsubscribeFromPush } = await import('./core/push.js');
+      await unsubscribeFromPush();
+      toast('تم تعطيل الإشعارات');
+      renderPushStatus();
+    } catch (e) { toast('خطأ: ' + e.message, false); }
+  };
+
+  window.__pushTest = async () => {
+    try {
+      const { sendTestNotification } = await import('./core/push.js');
+      await sendTestNotification();
+      toast('تم الإرسال — تحقق من شريط الإشعارات');
+    } catch (e) { toast('خطأ: ' + e.message, false); }
+  };
 }
 
 // ══════════════════════════════════════════════════════════════════
@@ -462,13 +491,12 @@ async function runIntegrityCheck() {
 }
 
 // ══════════════════════════════════════════════════════════════════
-//  loadAll — نقطة التحميل المركزية
+//  loadAll
 // ══════════════════════════════════════════════════════════════════
 async function loadAll(opts = {}) {
   const silent = opts.silent === true;
   const useCache = opts.useCache !== false;
 
-  // ─── 1) عرض الكاش فوراً ───
   if (useCache) {
     const cache = await loadCache();
     if (cache) {
@@ -489,7 +517,6 @@ async function loadAll(opts = {}) {
     showAllSkeletons();
   }
 
-  // ─── 2) جلب من الشبكة ───
   try {
     const syncEl = document.getElementById('sidebar-sync');
     if (syncEl && !useCache) syncEl.innerHTML = '<span class="sync-dot"></span> جاري التحميل...';
@@ -525,7 +552,6 @@ async function loadAll(opts = {}) {
       installments, installmentPayments, attachments
     });
 
-    // استبعد الحركات المرتبطة ببنوك محذوفة
     const validBankIds = new Set(banks.map(b => b.id));
     DB.bankTxns = DB.bankTxns.filter(t => validBankIds.has(t.bank_id));
 
@@ -619,31 +645,38 @@ async function onAuthSuccess() {
   updateCurrencyLabels();
   await loadAll();
 
-  // تطبيق العمليات المتكررة (مرة يومياً)
+  // معالجة الشهادات المنتهية
+  setTimeout(async () => {
+    try {
+      const result = await processMaturedCerts(false);
+      if (result.processed > 0) {
+        toast(`تم استرداد ${result.processed} شهادة منتهية ✓`, true);
+        setTimeout(() => loadAll({ silent: true }), 500);
+      }
+    } catch (e) { console.warn('[cert-maturation]', e.message); }
+  }, 2000);
+
+  // تطبيق العمليات المتكررة
   setTimeout(async () => {
     try {
       const result = await autoApplyRecurring(false);
       notifyAutoRecurringResult(result);
     } catch (e) { console.warn('[auto-recurring]', e.message); }
-  }, 1500);
+  }, 3000);
 
-  // تحميل Chart.js في الخلفية
   ensureChartLoaded();
-
-  // جلب الأسعار تلقائياً
   pricesPage.autoFetchExchangeRates(false);
   pricesPage.autoFetchMetalPrices(false);
 }
 
 // ══════════════════════════════════════════════════════════════════
-//  OCR Handler — استخراج النص من الصور
+//  OCR
 // ══════════════════════════════════════════════════════════════════
 function installOcrHandler() {
   window.__ocrScan = async (input, modalPrefix) => {
     const file = input.files?.[0];
     if (!file) return;
 
-    // تحويل البادئة: wit → ew، dep → ed (أسماء حقول HTML)
     const prefixMap = { wit: 'ew', dep: 'ed' };
     const realPrefix = prefixMap[modalPrefix] || modalPrefix;
 
@@ -671,11 +704,8 @@ function installOcrHandler() {
       if (parsed.merchant && notesEl) { notesEl.value = parsed.merchant; filled++; }
 
       if (progressEl) {
-        if (filled === 0) {
-          progressEl.innerHTML = `<span style="color:var(--gold)">لم يُتعرف على بيانات — املأ الحقول يدوياً</span>`;
-        } else {
-          progressEl.innerHTML = `<span style="color:var(--green)">تم استخراج ${filled} حقل</span>`;
-        }
+        if (filled === 0) progressEl.innerHTML = `<span style="color:var(--gold)">لم يُتعرف على بيانات — املأ الحقول يدوياً</span>`;
+        else progressEl.innerHTML = `<span style="color:var(--green)">تم استخراج ${filled} حقل</span>`;
         setTimeout(() => { progressEl.style.display = 'none'; }, 5000);
       }
 
@@ -692,7 +722,7 @@ function installOcrHandler() {
 }
 
 // ══════════════════════════════════════════════════════════════════
-//  exposeGlobals — تعريض الدوال لـ window
+//  exposeGlobals — كل الدوال التي يُستدعى إليها من HTML أو من وحدات أخرى
 // ══════════════════════════════════════════════════════════════════
 function exposeGlobals() {
   // Core
@@ -703,6 +733,25 @@ function exposeGlobals() {
     initAuthGate, connectSupabase, disconnectSupabase,
     doLogin, doSignup, doLogout, setAuthTab,
     openGlobalSearch, closeGlobalSearch
+  });
+
+  // === Render functions (يحتاجها shared.js و shortcuts.js) ===
+  Object.assign(window, {
+    renderBanks: banksPage.renderBanks,
+    renderBankTable: banksPage.renderBankTable,
+    renderStocks: stocksPage.renderStocks,
+    renderMetals: metalsPage.renderMetals,
+    renderCerts: certsPage.renderCerts,
+    renderDividends: stocksPage.renderDividends,
+    renderRecurring: recurringPage.renderRecurring,
+    renderGoals: goalsPage.renderGoals,
+    renderPrices: pricesPage.renderPrices,
+    renderReports: reportsPage.renderReports,
+    renderDashboard: dashboardPage.renderDashboard,
+    renderRecent: dashboardPage.renderRecent,
+    renderStockHeatmap: heatmapPage.renderStockHeatmap,
+    renderZakat: zakatPage.renderZakat,
+    renderSettings
   });
 
   // Banks
@@ -740,8 +789,7 @@ function exposeGlobals() {
     saveDividend: stocksPage.saveDividend,
     editDividend: stocksPage.editDividend,
     deleteDividend: stocksPage.deleteDividend,
-    setStockMarket,
-    renderStockHeatmap: heatmapPage.renderStockHeatmap
+    setStockMarket
   });
 
   // Metals
@@ -763,7 +811,17 @@ function exposeGlobals() {
     doBulkCertPayout: certsPage.doBulkCertPayout,
     openCertAttachments: certsPage.openCertAttachments,
     openCertPayout: (id) => import('./ui/modals.js').then(m => m.openCertPayout(id)),
-    openBulkCertPayout: () => import('./ui/modals.js').then(m => m.openBulkCertPayout())
+    openBulkCertPayout: () => import('./ui/modals.js').then(m => m.openBulkCertPayout()),
+    processMaturedCertsNow: async () => {
+      const r = await processMaturedCerts(true);
+      if (r.processed > 0) {
+        toast(`تم استرداد ${r.processed} شهادة ✓`);
+        await loadAll({ silent: true });
+      } else {
+        toast('لا توجد شهادات منتهية بحاجة للاسترداد');
+      }
+      return r;
+    }
   });
 
   // Debts
@@ -827,8 +885,7 @@ function exposeGlobals() {
       const { exportExcel: fn } = await import('./core/excel.js');
       return fn();
     },
-    updateReportCurrencyCard: reportsPage.updateReportCurrencyCard,
-    renderRecent: dashboardPage.renderRecent
+    updateReportCurrencyCard: reportsPage.updateReportCurrencyCard
   });
 
   // Zakat
@@ -863,7 +920,6 @@ function exposeGlobals() {
   Object.assign(window, {
     saveGeneralSettings,
     addSettingsCurrency,
-    renderSettings,
     exportBackup,
     importBackup,
     saveEdit,
@@ -873,7 +929,7 @@ function exposeGlobals() {
     openCSVImport
   });
 
-  // Settings helpers (تُستدعى من innerHTML)
+  // Settings helpers
   window.__renameSettingsCurrency = renameSettingsCurrency;
   window.__removeSettingsCurrency = removeSettingsCurrency;
   window.__populateMetalTypeSelect = populateMetalTypeSelect;
@@ -885,6 +941,7 @@ function exposeGlobals() {
 installToastGlobal();
 initDarkMode();
 installHelpAndSqlHandlers();
+installPushHandlers();
 installOcrHandler();
 exposeGlobals();
 installShortcuts();
@@ -900,7 +957,6 @@ taxPage.installTaxHandlers();
 setAuthSuccessHandler(onAuthSuccess);
 initAuthGate();
 
-// تسجيل Service Worker
 if ('serviceWorker' in navigator && !navigator.serviceWorker.controller) {
   window.addEventListener('load', () => {
     navigator.serviceWorker.register('sw.js', { scope: './' }).catch(() => {});
