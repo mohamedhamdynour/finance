@@ -126,3 +126,10 @@ export const debounce = (fn, ms = 250) => {
 
 // تنقية مُعرّف HTML (يُستخدم في id حقول أسعار المعادن)
 export const encodeID = s => String(s).replace(/[^a-zA-Z0-9\u0600-\u06FF]/g, '_');
+
+// يحوّل أي مبلغ إلى EGP (نقطة الارتكاز الثابتة)
+export const toEGPRaw = (amt, cur) => {
+  if (!cur || cur === 'EGP') return N2(amt);
+  const r = DB.exchangeRates.find(x => x.currency === cur);
+  return N2(amt) * (r ? N2(r.rate) : 1);
+};
