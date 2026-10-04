@@ -181,7 +181,10 @@ function renderPage() {
     else if (p === 'tax') taxPage.renderTax();
     else if (p === 'zakat') zakatPage.renderZakat();
     else if (p === 'forecast') forecastPage.renderForecast();
-    else if (p === 'settings') renderSettings();
+    else if (p === 'settings') {
+      renderSettings();
+      setTimeout(renderPushStatus, 100);
+    },
     else if (p === 'comparisons') comparisonsPage.renderComparisons();
   } catch (e) {
     console.error('renderPage error on page [' + p + ']:', e);
