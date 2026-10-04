@@ -48,3 +48,18 @@
 ---
 
 ## البنية
+
+## الترحيل (Supabase)
+
+- ملف `schema.sql` مخصص للتهيئة/التجارب فقط (ويحتوي أوامر حذف/إعادة إنشاء).
+- للإنتاج استخدم الترحيلات غير المدمّرة داخل `migrations/`.
+- الترحيل الأمني الحالي: `migrations/20261004_security_and_sharing.sql` ويضيف:
+  - جداول `portfolio_members`, `installments`, `installment_payments`, `attachments`
+  - دوال آمنة للمشاركة والاستيراد الذري `accept_pending_invites` و `import_backup_payload`
+  - سياسات RLS للمشاهدة/التعديل حسب دور `viewer/editor`
+
+## الاختبارات
+
+- لا يوجد إطار اختبار ثقيل حاليًا.
+- يمكن تشغيل الاختبارات الحالية (إن وُجدت) بأمر:
+  - `node --test tests/*.test.js`

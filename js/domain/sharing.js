@@ -93,6 +93,7 @@ export async function acceptPendingInvites() {
 // ══════════════════ السياق (Context) ══════════════════
 
 const CTX_KEY = 'viewingContextUid';
+const CTX_ROLE_KEY = 'viewingContextRole';
 
 /**
  * يُرجع user_id الخاص بالسياق الحالي:
@@ -109,13 +110,18 @@ export function getContextUserId() {
 /**
  * يضبط سياق العرض على محفظة عضو آخر.
  */
-export function setViewingContext(ownerUserId) {
+export function setViewingContext(ownerUserId, role = null) {
   if (!ownerUserId) {
     localStorage.removeItem(CTX_KEY);
+    localStorage.removeItem(CTX_ROLE_KEY);
     conn.viewingUserId = null;
+    conn.viewingRole = null;
   } else {
     localStorage.setItem(CTX_KEY, ownerUserId);
+    if (role) localStorage.setItem(CTX_ROLE_KEY, role);
+    else localStorage.removeItem(CTX_ROLE_KEY);
     conn.viewingUserId = ownerUserId;
+    conn.viewingRole = role || null;
   }
 }
 
@@ -133,13 +139,22 @@ export function isViewingShared() {
  */
 export function initViewingContext() {
   const stored = localStorage.getItem(CTX_KEY);
+  const role = localStorage.getItem(CTX_ROLE_KEY);
   const myUid = conn.authSession?.user?.id;
   if (stored && stored !== myUid) {
     conn.viewingUserId = stored;
+    conn.viewingRole = role || null;
   } else {
     conn.viewingUserId = null;
+    conn.viewingRole = null;
     localStorage.removeItem(CTX_KEY);
+    localStorage.removeItem(CTX_ROLE_KEY);
   }
+}
+
+export function canEditCurrentContext() {
+  if (!isViewingShared()) return true;
+  return conn.viewingRole === 'editor';
 }
 
 /**
@@ -159,6 +174,9 @@ export async function verifyCurrentContext() {
       setViewingContext(null);
       return false;
     }
+    const role = rows[0]?.role || null;
+    localStorage.setItem(CTX_ROLE_KEY, role || '');
+    conn.viewingRole = role;
     return true;
   } catch (e) {
     return true; // تجاهل أخطاء الشبكة العابرة

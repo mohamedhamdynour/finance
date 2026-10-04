@@ -3,7 +3,7 @@
 // ══════════════════════════════════════════════════════════════════
 import { DB, APP_SETTINGS, conn } from '../../state.js';
 import { N2, fmtN, today, escapeHtml, encodeID, baseCur } from '../../core/utils.js';
-import { sbGet, sbUpsert, sbPost, sbPatch } from '../../core/supabase.js';
+import { sbGet, sbUpsert, sbDelBy } from '../../core/supabase.js';
 import { toast } from '../toast.js';
 import { getHoldings, getMetalHoldings, getStockPrice, getMetalPrice } from '../../domain/calc.js';
 import { persistAppSettings } from '../../core/settings.js';
@@ -20,7 +20,7 @@ export function renderPrices() {
     return `<div class="price-item">
       <div>
         <div class="price-item-label">${escapeHtml(sym)}${!isHeld ? ' <span style="font-size:9.5px;color:var(--red);font-weight:700;background:var(--red-l);padding:1px 5px;border-radius:4px">مُباع</span>' : ''}</div>
-        <div class="price-item-sub">${escapeHtml(p?.name || h[sym]?.name || '')}${!isHeld ? ` — <button class="btn btn-xs btn-danger" onclick="removeOrphanStock('${escapeHtml(sym)}')">حذف</button>` : ''}</div>
+        <div class="price-item-sub">${escapeHtml(p?.name || h[sym]?.name || '')}${!isHeld ? ` — <button class="btn btn-xs btn-danger" onclick="removeOrphanStock('${encodeURIComponent(sym)}')">حذف</button>` : ''}</div>
       </div>
       <input class="price-input" type="number" step="0.01" id="sp-${encodeID(sym)}" value="${p?.current_price || ''}" placeholder="0.00">
     </div>`;
@@ -60,7 +60,7 @@ export function renderPrices() {
   document.getElementById('exchange-rates-list').innerHTML = currencies.length
     ? fxStatus + currencies.map(cur => {
         const r = DB.exchangeRates.find(x => x.currency === cur);
-        return `<div class="price-item"><div><div class="price-item-label">${escapeHtml(cur)} → EGP</div><div class="price-item-sub">${r?.updated_at ? 'آخر تحديث: ' + new Date(r.updated_at).toLocaleDateString('ar-EG') : '—'}</div></div><div style="display:flex;gap:6px;align-items:center"><input class="price-input" type="number" step="0.0001" id="exr-${escapeHtml(cur)}" value="${r?.rate || ''}" placeholder="49.5"><button class="btn btn-xs btn-teal" onclick="saveExchangeRate('${escapeHtml(cur)}')">حفظ</button></div></div>`;
+        return `<div class="price-item"><div><div class="price-item-label">${escapeHtml(cur)} → EGP</div><div class="price-item-sub">${r?.updated_at ? 'آخر تحديث: ' + new Date(r.updated_at).toLocaleDateString('ar-EG') : '—'}</div></div><div style="display:flex;gap:6px;align-items:center"><input class="price-input" type="number" step="0.0001" id="exr-${escapeHtml(cur)}" value="${r?.rate || ''}" placeholder="49.5"><button class="btn btn-xs btn-teal" onclick="saveExchangeRate('${encodeURIComponent(cur)}')">حفظ</button></div></div>`;
       }).join('')
     : `<div style="color:var(--muted);font-size:12px;padding:12px">لا توجد حسابات بعملات أجنبية</div>`;
 }
@@ -95,6 +95,7 @@ export async function saveMetalPrices() {
 }
 
 export async function saveExchangeRate(cur) {
+  cur = decodeURIComponent(cur || '');
   const el = document.getElementById('exr-' + cur);
   if (!el) return;
   const rate = N2(el.value);
@@ -123,7 +124,11 @@ export async function autoFetchExchangeRates(manual = false) {
       } else failed.push(cur);
     } catch (e) { failed.push(cur); }
   }
-  localStorage.setItem('lastFxFetchDate', todayStr);
+  if (updated > 0) {
+    localStorage.setItem('lastFxFetchDate', todayStr);
+    localStorage.setItem('lastFxFetchAt', new Date().toISOString());
+    localStorage.setItem('lastFxSource', 'open.er-api.com');
+  }
   if (btn) btn.disabled = false;
   if (updated > 0) { toast(`تم تحديث ${updated} عملة`); await reload(); }
   else if (manual) alert('تعذّر الجلب');
@@ -182,14 +187,19 @@ export async function autoFetchMetalPrices(manual = false) {
     const gp = extractGramPrice(data, t);
     if (gp) { await sbUpsert('metal_prices', { metal_type: t, price_per_gram: +N2(gp).toFixed(2) }); updated++; }
   }
-  localStorage.setItem('lastMetalFetchDate', todayStr);
+  if (updated > 0) {
+    localStorage.setItem('lastMetalFetchDate', todayStr);
+    localStorage.setItem('lastMetalFetchAt', new Date().toISOString());
+    localStorage.setItem('lastMetalSource', 'goldapi.io');
+  }
   if (btn) btn.disabled = false;
   if (updated > 0) { toast(`تم تحديث ${updated} نوع`); await reload(); }
   else if (manual) alert('تعذّر التحديث');
 }
 
 export async function removeOrphanStock(sym) {
+  sym = decodeURIComponent(sym || '');
   if (!confirm(`حذف سعر ${sym}؟`)) return;
-  try { await sbPost('stock_prices?symbol=eq.' + encodeURIComponent(sym), 'DELETE'); toast('تم الحذف'); await reload(); }
+  try { await sbDelBy('stock_prices', 'symbol=eq.' + encodeURIComponent(sym)); toast('تم الحذف'); await reload(); }
   catch (e) { toast('خطأ: ' + e.message, false); }
 }

@@ -320,6 +320,19 @@ async function openSqlModal() {
 
   openModal('modal-edit');
 
+  const isProductionHost =
+    location.protocol === 'https:' &&
+    !/^(localhost|127\.0\.0\.1)$/i.test(location.hostname);
+  if (isProductionHost) {
+    bodyEl.innerHTML = `
+      <div style="padding:16px;border-radius:10px;background:var(--red-l);border:.5px solid var(--red);color:var(--red-d);line-height:1.8">
+        <div style="font-weight:900;margin-bottom:6px">⚠ تم تعطيل عرض schema.sql في بيئة الإنتاج</div>
+        <div>لتجنب تشغيل SQL مُدمّر بالخطأ، هذه الشاشة متاحة فقط على بيئات التطوير المحلية.</div>
+      </div>
+    `;
+    return;
+  }
+
   try {
     const res = await fetch('schema.sql?v=' + Date.now());
     if (!res.ok) throw new Error('تعذّر تحميل ملف schema.sql');
@@ -554,6 +567,21 @@ async function loadAll(opts = {}) {
   }
 
   try {
+    const optionalTableGet = async (table, query) => {
+      try {
+        return await sbGet(table, query);
+      } catch (e) {
+        const msg = e?.message || '';
+        if (/42P01|does not exist|schema cache|Could not find/i.test(msg)) {
+          console.warn(`[loadAll] optional table "${table}" not available:`, msg);
+          window.__schemaWarnings = window.__schemaWarnings || new Set();
+          window.__schemaWarnings.add(table);
+          return [];
+        }
+        throw e;
+      }
+    };
+
     const syncEl = document.getElementById('sidebar-sync');
     if (syncEl && !useCache) syncEl.innerHTML = '<span class="sync-dot"></span> جاري التحميل...';
 
@@ -576,9 +604,9 @@ async function loadAll(opts = {}) {
       sbGet('portfolio_snapshots', `?order=snapshot_date.asc&limit=500`),
       sbGet('debts', `?order=id&deleted_at=is.null`),
       sbGet('debt_payments', `?order=date.desc&deleted_at=is.null`),
-      sbGet('installments', `?order=id&deleted_at=is.null`),
-      sbGet('installment_payments', `?order=date.desc&deleted_at=is.null`),
-      sbGet('attachments', `?order=created_at.desc&deleted_at=is.null`).catch(() => [])
+      optionalTableGet('installments', `?order=id&deleted_at=is.null`),
+      optionalTableGet('installment_payments', `?order=date.desc&deleted_at=is.null`),
+      optionalTableGet('attachments', `?order=created_at.desc&deleted_at=is.null`)
     ]);
 
     Object.assign(DB, {
@@ -641,9 +669,27 @@ async function loadAll(opts = {}) {
 // ══════════════════════════════════════════════════════════════════
 async function exportBackup() {
   try {
-    const tables = ['banks','bank_transactions','stock_transactions','stock_prices','metal_transactions','metal_prices','certificates','dividends','recurring_transactions','financial_goals','exchange_rates','portfolio_snapshots','debts','debt_payments','installments','installment_payments'];
+    const tables = ['banks','bank_transactions','stock_transactions','stock_prices','metal_transactions','metal_prices','certificates','dividends','recurring_transactions','financial_goals','exchange_rates','portfolio_snapshots','debts','debt_payments','installments','installment_payments','attachments'];
+    const tableQuery = {
+      stock_prices: '?order=symbol',
+      metal_prices: '?order=metal_type',
+      exchange_rates: '?order=currency',
+      portfolio_snapshots: '?order=snapshot_date.asc',
+      attachments: '?order=created_at.desc'
+    };
     const data = {};
-    for (const t of tables) data[t] = await sbGet(t, '?order=id');
+    for (const t of tables) {
+      try {
+        data[t] = await sbGet(t, tableQuery[t] || '?order=id');
+      } catch (e) {
+        const msg = e?.message || '';
+        if (/42P01|does not exist|schema cache|Could not find/i.test(msg)) {
+          data[t] = [];
+          continue;
+        }
+        throw e;
+      }
+    }
     const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
     const a = document.createElement('a');
     a.href = URL.createObjectURL(blob);
@@ -659,13 +705,21 @@ async function importBackup(input) {
   try {
     const text = await file.text();
     const data = JSON.parse(text);
+    if (!data || typeof data !== 'object' || Array.isArray(data)) {
+      throw new Error('ملف النسخة الاحتياطية غير صالح');
+    }
+    for (const [table, rows] of Object.entries(data)) {
+      if (!Array.isArray(rows)) throw new Error(`تنسيق غير صالح للجدول: ${table}`);
+    }
     if (!confirm('سيتم مسح البيانات الحالية واستبدالها. متابعة؟')) return;
-    const order = ['financial_goals','recurring_transactions','dividends','debt_payments','debts','installment_payments','installments','certificates','metal_transactions','stock_transactions','bank_transactions','exchange_rates','stock_prices','metal_prices','portfolio_snapshots','banks'];
-    for (const table of order) {
-      if (!data[table]) continue;
-      const ex = await sbGet(table, '?select=id');
-      for (const row of ex) { try { await sbDel(table, row.id); } catch (e) {} }
-      if (data[table].length) await sbPost(table, data[table]);
+    try {
+      await sbRpc('import_backup_payload', { p_payload: data });
+    } catch (e) {
+      const msg = e?.message || '';
+      if (/import_backup_payload|function .* does not exist|Could not find/i.test(msg)) {
+        throw new Error('ميزة الاستيراد الآمن تحتاج ترحيل قاعدة البيانات الأخير (import_backup_payload).');
+      }
+      throw e;
     }
     toast('تم الاستيراد بنجاح');
     await loadAll();
