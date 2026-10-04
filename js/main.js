@@ -442,14 +442,38 @@ function installPushHandlers() {
 //  Snapshots
 // ══════════════════════════════════════════════════════════════════
 async function saveSnapshot() {
-  const t = calcTotals();
+  // احسب القيم دائماً بعملة EGP (نقطة الارتكاز)
+  const EGP = 'EGP';
+  const totalBanksEGP = DB.banks.reduce((a, b) => {
+    const balance = N2(b.balance);
+    const cur = b.currency || 'EGP';
+    const rate = cur === 'EGP' ? 1 : (DB.exchangeRates.find(x => x.currency === cur)?.rate || 1);
+    return a + balance * rate;
+  }, 0);
+
+  const h = getHoldings();
+  const stocksValEGP = Object.entries(h).reduce((a, [s, v]) => {
+    const cp = getStockPrice(s) || v.avgPrice;
+    return a + v.qty * cp;
+  }, 0);
+
+  const mh = getMetalHoldings();
+  const metalsValEGP = Object.entries(mh).reduce((a, [k, v]) => {
+    const bt = (v.metal_type || k.split('|')[0]).trim();
+    const cp = getMetalPrice(bt) || v.avgPrice;
+    return a + v.weight * cp;
+  }, 0);
+
+  const activeCerts = DB.certs.filter(c => !c.matured_at && c.maturity_date > today());
+  const certsTotalEGP = activeCerts.reduce((a, c) => a + N2(c.amount), 0);
+
   const snap = {
     snapshot_date: today(),
-    total_banks: t.totalBanks,
-    total_stocks: t.stocksVal,
-    total_metals: t.metalsVal,
-    total_certs: t.certsTotal,
-    grand_total: t.grand
+    total_banks: totalBanksEGP,
+    total_stocks: stocksValEGP,
+    total_metals: metalsValEGP,
+    total_certs: certsTotalEGP,
+    grand_total: totalBanksEGP + stocksValEGP + metalsValEGP + certsTotalEGP
   };
   try { await sbUpsert('portfolio_snapshots', snap); } catch (e) {}
 }
