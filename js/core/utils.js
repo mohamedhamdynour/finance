@@ -1,5 +1,5 @@
 // ══════════════════════════════════════════════════════════════════
-//  utils.js — دوال مساعدة (تنسيق، تواريخ، عملات، ألوان)
+//  utils.js — دوال مساعدة
 // ══════════════════════════════════════════════════════════════════
 import { DB, UI, APP_SETTINGS } from '../state.js';
 
@@ -19,6 +19,13 @@ export const MARKET_NAMES = {
   'NYSE':'NYSE','NASDAQ':'NASDAQ','CRYPTO':'كريبتو'
 };
 
+export const CURRENCY_LABELS = {
+  EGP:'الجنيه المصري', SAR:'ريال سعودي', AED:'درهم إماراتي',
+  USD:'دولار أمريكي', EUR:'يورو', GBP:'جنيه إسترليني',
+  KWD:'دينار كويتي', QAR:'ريال قطري', BHD:'دينار بحريني',
+  OMR:'ريال عماني', JOD:'دينار أردني'
+};
+
 // ─── أرقام وتنسيق ──────────────────────────────────────────────
 export const N2 = v => (isNaN(+v) ? 0 : +v);
 
@@ -29,6 +36,12 @@ export const fmtN = (v, d = 2) => new Intl.NumberFormat('ar-EG', {
 
 // ─── العملة الأساسية ───────────────────────────────────────────
 export const baseCur = () => (APP_SETTINGS && APP_SETTINGS.base_currency) || 'EGP';
+
+// ✅ جديد: الاسم الكامل للعملة الأساسية
+export const baseCurName = () => {
+  const c = (APP_SETTINGS.currencies || []).find(x => x.code === baseCur());
+  return c ? c.name : baseCur();
+};
 
 export const fmt = (v, cur) => fmtN(v) + ' ' + (cur || baseCur());
 
@@ -84,13 +97,34 @@ export const getRate = (cur) => {
   return r ? N2(r.rate) : 1;
 };
 
-// يحوّل أي مبلغ إلى العملة الأساسية عبر EGP كنقطة ارتكاز
+/**
+ * ✅ يحوّل مبلغاً بعملة معينة إلى EGP مباشرة (نقطة الارتكاز الثابتة)
+ * — استخدمها عند حفظ/قراءة snapshots وإحصائيات تاريخية
+ */
+export const toEGPRaw = (amt, cur) => {
+  if (!cur || cur === 'EGP') return N2(amt);
+  return N2(amt) * getRate(cur);
+};
+
+/**
+ * يحوّل مبلغاً من عملة إلى العملة الأساسية المختارة حالياً
+ * (يستخدم EGP كنقطة ارتكاز داخلية)
+ */
 export const toEGP = (amt, cur) => {
-  const amtInEGP = N2(amt) * getRate(cur || 'EGP');
+  const amtInEGP = toEGPRaw(amt, cur);
   const bc = baseCur();
   if (bc === 'EGP') return amtInEGP;
   const baseRate = getRate(bc);
   return baseRate > 0 ? amtInEGP / baseRate : amtInEGP;
+};
+
+/**
+ * ✅ يحوّل مبلغاً من EGP إلى عملة معينة (للعرض)
+ */
+export const fromEGP = (egpAmt, targetCur) => {
+  if (!targetCur || targetCur === 'EGP') return N2(egpAmt);
+  const rate = getRate(targetCur);
+  return rate > 0 ? N2(egpAmt) / rate : N2(egpAmt);
 };
 
 // ─── ألوان البنوك ──────────────────────────────────────────────
@@ -107,9 +141,7 @@ export const bankColorDot = (bankId, size = 8) => {
   return `<span style="display:inline-block;width:${size}px;height:${size}px;border-radius:50%;background:${c};flex-shrink:0;margin-left:3px"></span>`;
 };
 
-// ─── مساعدات جديدة (لم تكن موجودة قبل) ─────────────────────────
-
-// تهريب نص المستخدم قبل وضعه في innerHTML (منع XSS)
+// ─── مساعدات ───────────────────────────────────────────────────
 export const escapeHtml = (s) => String(s ?? '').replace(/[&<>"']/g, c => ({
   '&': '&amp;',
   '<': '&lt;',
@@ -118,18 +150,12 @@ export const escapeHtml = (s) => String(s ?? '').replace(/[&<>"']/g, c => ({
   "'": '&#39;'
 }[c]));
 
-// تأخير تنفيذ الدالة (للبحث الحيّ مثلاً)
 export const debounce = (fn, ms = 250) => {
   let t;
-  return (...args) => { clearTimeout(t); t = setTimeout(() => fn(...args), ms); };
+  return (...args) => {
+    clearTimeout(t);
+    t = setTimeout(() => fn(...args), ms);
+  };
 };
 
-// تنقية مُعرّف HTML (يُستخدم في id حقول أسعار المعادن)
 export const encodeID = s => String(s).replace(/[^a-zA-Z0-9\u0600-\u06FF]/g, '_');
-
-// يحوّل أي مبلغ إلى EGP (نقطة الارتكاز الثابتة)
-export const toEGPRaw = (amt, cur) => {
-  if (!cur || cur === 'EGP') return N2(amt);
-  const r = DB.exchangeRates.find(x => x.currency === cur);
-  return N2(amt) * (r ? N2(r.rate) : 1);
-};
