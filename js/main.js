@@ -184,7 +184,7 @@ function renderPage() {
     else if (p === 'settings') {
       renderSettings();
       setTimeout(renderPushStatus, 100);
-    },
+    }
     else if (p === 'comparisons') comparisonsPage.renderComparisons();
   } catch (e) {
     console.error('renderPage error on page [' + p + ']:', e);
