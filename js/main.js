@@ -37,6 +37,7 @@ import * as auditPage from './ui/pages/audit.js';
 import { installAuditHandlers } from './ui/pages/audit.js';
 import * as taxPage from './ui/pages/tax.js';
 import { openCSVImport, installCSVHandlers } from './ui/csv-import.js';
+import { extractText, parseReceipt } from './domain/ocr.js';
 
 // ─── 2) UI Shared ──────────────────────────────────────────────
 import { toast, installToastGlobal } from './ui/toast.js';
@@ -611,6 +612,51 @@ Object.assign(window, {
   autoCalcInstallmentAmount: installmentsPage.autoCalcInstallmentAmount
 });
 
+  window.__ocrScan = async (input, modalPrefix) => {
+  const file = input.files?.[0];
+  if (!file) return;
+
+  const progressEl = document.getElementById(`ocr-progress-${modalPrefix}`);
+  if (progressEl) { progressEl.style.display = 'block'; progressEl.textContent = '⏳ جاري تحميل Tesseract...'; }
+
+  try {
+    const text = await extractText(file, pct => {
+      if (progressEl) progressEl.textContent = `⏳ جاري التحليل... ${pct.toFixed(0)}%`;
+    });
+
+    const parsed = parseReceipt(text);
+
+    // امتلئ الحقول
+    if (parsed.amount) {
+      document.getElementById(`${modalPrefix}-amount`).value = parsed.amount.toFixed(2);
+    }
+    if (parsed.date) {
+      document.getElementById(`${modalPrefix}-date`).value = parsed.date;
+    }
+    if (parsed.merchant) {
+      const notesEl = document.getElementById(`${modalPrefix}-notes`);
+      if (notesEl) notesEl.value = parsed.merchant;
+    }
+
+    if (progressEl) {
+      progressEl.innerHTML = `<span style="color:var(--green)">✓ تم الاستخراج (${parsed.amount ? fmt(parsed.amount) : 'بدون مبلغ'})</span>`;
+      setTimeout(() => { progressEl.style.display = 'none'; }, 4000);
+    }
+
+    // حدّث المعاينة
+    if (modalPrefix === 'wit' && typeof window.updateWitPreview === 'function') window.updateWitPreview();
+    if (modalPrefix === 'dep' && typeof window.updateDepPreview === 'function') window.updateDepPreview();
+
+    // أظهر النص الكامل للمراجعة (اختياري)
+    console.log('[OCR] Extracted:', parsed);
+    console.log('[OCR] Raw text:', text);
+  } catch (e) {
+    if (progressEl) progressEl.innerHTML = `<span style="color:var(--red)">✗ ${e.message}</span>`;
+    console.error('[OCR] failed:', e);
+  } finally {
+    input.value = '';
+  }
+};
   
   // Settings helpers (تُستدعى من innerHTML بـ window.__)
   window.__DB__ = DB;   // لفتح المرفقات
