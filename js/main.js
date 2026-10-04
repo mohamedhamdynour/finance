@@ -32,7 +32,7 @@ import { exportExcel } from './core/excel.js';
 import { autoApplyRecurring, notifyAutoRecurringResult } from './domain/auto-recurring.js';
 import * as comparisonsPage from './ui/pages/comparisons.js';
 import { installDetectorHandlers } from './ui/recurring-detector.js';
-
+import { installLoanCalcHandlers, renderLoanCalcPage } from './ui/loan-calc.js';
 // ─── 2) UI Shared ──────────────────────────────────────────────
 import { toast, installToastGlobal } from './ui/toast.js';
 import { destroyChart } from './ui/charts.js';
@@ -630,6 +630,7 @@ if ('serviceWorker' in navigator && !navigator.serviceWorker.controller) {
     navigator.serviceWorker.register('sw.js', { scope: './' }).catch(() => {});
   });
 }
+installLoanCalcHandlers();
 installNetworkIndicator();
 setupNetworkToasts();
 installAttachmentHandlers();
