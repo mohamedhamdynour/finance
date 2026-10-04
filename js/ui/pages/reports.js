@@ -3,7 +3,7 @@
 //  ⚠️ يستثني الشهادات المُستردّة (matured_at) من الإجماليات
 // ══════════════════════════════════════════════════════════════════
 import { DB, UI, APP_SETTINGS, CHARTS } from '../../state.js';
-import { N2, fmt, fmtN, fmtK, pct, sign, cls, today, escapeHtml, getBankColor, toEGP, baseCur, MARKET_NAMES, MARKET_COLORS } from '../../core/utils.js';
+import { N2, fmt, fmtN, fmtK, pct, sign, cls, today, escapeHtml, getBankColor, toEGP, fromEGP, baseCur, MARKET_NAMES, MARKET_COLORS } from '../../core/utils.js';
 import { PALETTE } from '../charts.js';
 import { toast } from '../toast.js';
 import { kpi, svgIcon, getReportPeriodBounds } from '../shared.js';
@@ -345,14 +345,14 @@ export function renderReportCharts(PT) {
   }]);
 
   const snaps = DB.snapshots.filter(s => s.snapshot_date >= rStart && s.snapshot_date <= rEnd);
-  if (snaps.length > 1) mkLine('r-line', snaps.map(s => {
-    const d = new Date(s.snapshot_date);
-    return d.toLocaleDateString('ar-EG', { month: 'short', day: 'numeric' });
-  }), [
-    { label: 'الإجمالي', data: snaps.map(s => N2(s.grand_total)), borderColor: '#1a56db', backgroundColor: 'rgba(26,86,219,.08)', fill: true, tension: .4, pointRadius: snaps.length < 40 ? 2 : 0, borderWidth: 2 },
-    { label: 'البنوك', data: snaps.map(s => N2(s.total_banks)), borderColor: '#0891b2', fill: false, tension: .4, pointRadius: 0, borderWidth: 1.5, borderDash: [4, 4] },
-    { label: 'الأسهم', data: snaps.map(s => N2(s.total_stocks)), borderColor: '#0d9488', fill: false, tension: .4, pointRadius: 0, borderWidth: 1.5, borderDash: [4, 4] }
-  ]);
+if (snaps.length > 1) mkLine('r-line', snaps.map(s => {
+  const d = new Date(s.snapshot_date);
+  return d.toLocaleDateString('ar-EG', { month: 'short', day: 'numeric' });
+}), [
+  { label: 'الإجمالي', data: snaps.map(s => fromEGP(N2(s.grand_total), baseCur())), borderColor: '#1a56db', backgroundColor: 'rgba(26,86,219,.08)', fill: true, tension: .4, pointRadius: snaps.length < 40 ? 2 : 0, borderWidth: 2 },
+  { label: 'البنوك', data: snaps.map(s => fromEGP(N2(s.total_banks), baseCur())), borderColor: '#0891b2', fill: false, tension: .4, pointRadius: 0, borderWidth: 1.5, borderDash: [4, 4] },
+  { label: 'الأسهم', data: snaps.map(s => fromEGP(N2(s.total_stocks), baseCur())), borderColor: '#0d9488', fill: false, tension: .4, pointRadius: 0, borderWidth: 1.5, borderDash: [4, 4] }
+]);
 
   if (Object.keys(h).length) {
     const ent = Object.entries(h);
