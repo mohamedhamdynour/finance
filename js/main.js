@@ -568,17 +568,17 @@ async function loadAll(opts = {}) {
       sbGet('stock_prices', `?order=symbol${uidFilter}`),
       sbGet('metal_transactions', `?order=date.asc,id.asc&deleted_at=is.null${uidFilter}`),
       sbGet('metal_prices', `?order=metal_type${uidFilter}`),
-      sbGet('certificates', `?order=issued_date.asc&deleted_at=is.null${uidFilter}`),
-      sbGet('dividends', `?order=date.desc&deleted_at=is.null${uidFilter}`),
-      sbGet('recurring_transactions', `?order=id&deleted_at=is.null${uidFilter}`),
-      sbGet('financial_goals', `?order=id&deleted_at=is.null${uidFilter}`),
+      sbGet('certificates', `?order=issued_date.asc&deleted_at=is.null`),
+      sbGet('dividends', `?order=date.desc&deleted_at=is.null`),
+      sbGet('recurring_transactions', `?order=id&deleted_at=is.null`),
+      sbGet('financial_goals', `?order=id&deleted_at=is.null`),
       sbGet('exchange_rates', `?order=currency${uidFilter}`),
-      sbGet('portfolio_snapshots', `?order=snapshot_date.asc&limit=500${uidFilter}`),
-      sbGet('debts', `?order=id&deleted_at=is.null${uidFilter}`),
-      sbGet('debt_payments', `?order=date.desc&deleted_at=is.null${uidFilter}`),
-      sbGet('installments', `?order=id&deleted_at=is.null${uidFilter}`),
-      sbGet('installment_payments', `?order=date.desc&deleted_at=is.null${uidFilter}`),
-      sbGet('attachments', `?order=created_at.desc&deleted_at=is.null${uidFilter}`).catch(() => [])
+      sbGet('portfolio_snapshots', `?order=snapshot_date.asc&limit=500`),
+      sbGet('debts', `?order=id&deleted_at=is.null`),
+      sbGet('debt_payments', `?order=date.desc&deleted_at=is.null`),
+      sbGet('installments', `?order=id&deleted_at=is.null`),
+      sbGet('installment_payments', `?order=date.desc&deleted_at=is.null`),
+      sbGet('attachments', `?order=created_at.desc&deleted_at=is.null`).catch(() => [])
     ]);
 
     Object.assign(DB, {
@@ -600,6 +600,7 @@ async function loadAll(opts = {}) {
     updateBadges();
     renderPage();
     updateNotificationBell();
+    updateSharedBanner();
     hideAllSkeletons();
 
     const t = calcTotals();
@@ -995,6 +996,11 @@ function exposeGlobals() {
     openCSVImport
   });
 
+    // Sharing
+  Object.assign(window, {
+    renderSharingCard,
+    updateSharedBanner
+  });
     // ✅ للتشخيص من Console
   window.__DEBUG__ = {
     DB,
@@ -1031,6 +1037,7 @@ installAttachmentHandlers();
 installDetectorHandlers();
 installLoanCalcHandlers();
 installCSVHandlers();
+installSharingHandlers();
 installTelegramHandlers();
 auditPage.installAuditHandlers();
 taxPage.installTaxHandlers();
