@@ -1,9 +1,10 @@
 // ══════════════════════════════════════════════════════════════════
-//  state.js — الحالة العامة للتطبيق (بدون أي منطق)
-//  أي وحدة أخرى تستورد منها ما تحتاجه. لا تستورد هي أي شيء.
+//  state.js — الحالة العامة للتطبيق
+//  مسؤولية واحدة: تعريف الحاويات المشتركة (DB, UI, APP_SETTINGS, ...)
+//  لا يستورد أي شيء — يُستورد فقط.
 // ══════════════════════════════════════════════════════════════════
 
-// ─── البيانات المُحمَّلة من قاعدة البيانات ───────────────────────
+// ─── البيانات المُحمَّلة من قاعدة البيانات ────────────────────────
 export const DB = {
   banks: [],
   bankTxns: [],
@@ -24,7 +25,7 @@ export const DB = {
   attachments: []
 };
 
-// ─── حالة الواجهة (UI) ─────────────────────────────────────────
+// ─── حالة الواجهة ──────────────────────────────────────────────
 export const UI = {
   activePage: 'dashboard',
   activeBankId: null,
@@ -39,10 +40,10 @@ export const UI = {
 // ─── مراجع الرسوم البيانية ─────────────────────────────────────
 export const CHARTS = {};
 
-// ─── إعدادات التطبيق (يُحمَّل من قاعدة البيانات أو localStorage) ─
+// ─── إعدادات التطبيق (يُحمَّل من قاعدة البيانات أو localStorage) ──
 export const APP_SETTINGS = {
   exchange_name: '',
-  base_currency: 'EGP',
+  base_currency: 'EGP',       // ← يمكن تغييرها من الإعدادات
   currencies: [
     { code: 'EGP', name: 'الجنيه المصري' },
     { code: 'USD', name: 'دولار أمريكي' },
@@ -64,19 +65,25 @@ export const APP_SETTINGS = {
     targets: { banks: 25, stocks: 45, metals: 20, certs: 10 },
     threshold: 5
   },
-    forecast: {
+  forecast: {
     horizon: 12,
     expectedReturn: 15,
     monthsBack: 6,
     monthlyContribution: null
   },
+  tax: {
+    stockCapitalGainsRate: 0,
+    stockDividendRate: 10,
+    certInterestRate: 0,
+    bankInterestRate: 20,
+    exemptThreshold: 0
+  },
   comparisons: {
     defaultTab: 'mom'
-  },
+  }
 };
 
-// ─── حالة الاتصال والمصادقة ────────────────────────────────────
-// نستخدم كائنًا قابلاً للتعديل لأن ES Modules تمنع إعادة التصدير المباشر
+// ─── حالة الاتصال والمصادقة ─────────────────────────────────────
 export const conn = {
   SB_URL: '',
   SB_KEY: '',
@@ -85,8 +92,8 @@ export const conn = {
   settingsBackend: 'local'
 };
 
-// ─── سياق التعديل الحالي (generic edit modal) ──────────────────
+// ─── سياق التعديل الحالي (Generic Edit Modal) ──────────────────
 export const editCtx = { table: null, id: null };
 
-// ─── سوق الأسهم النشط ─────────────────────────────────────────
+// ─── السوق النشط في صفحة الأسهم ────────────────────────────────
 export const marketCtx = { activeStockMarket: 'ALL' };
