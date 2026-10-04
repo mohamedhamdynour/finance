@@ -1,16 +1,17 @@
 // ══════════════════════════════════════════════════════════════════
-//  pages/certs.js — الشهادات الادخارية + المرفقات + Undo
+//  pages/certs.js — الشهادات الادخارية + استرداد تلقائي
 // ══════════════════════════════════════════════════════════════════
 import { DB } from '../../state.js';
 import { N2, fmt, fmtN, pct, today, sign, cls, escapeHtml, baseCur, toEGP } from '../../core/utils.js';
 import { sbPost, sbPatch, sbDel } from '../../core/supabase.js';
 import { toast } from '../toast.js';
 import { deleteWithUndo } from '../undo.js';
-import { kpi, svgIcon, populateSelect, getCertAlerts } from '../shared.js';
+import { kpi, svgIcon, populateSelect } from '../shared.js';
 import { openModal, closeModal } from '../modals.js';
 import { calcTotals, calcAccruedInterest, getCertPayoutSchedule } from '../../domain/calc.js';
 import { renderAttachmentsSection } from '../attachments.js';
 import { attachmentsCount } from '../../domain/attachments.js';
+import { detectMaturedCerts } from '../../domain/cert-maturation.js';
 
 const reload = () => window.loadAll?.();
 
@@ -18,57 +19,81 @@ const reload = () => window.loadAll?.();
 
 export function renderCerts() {
   const T = calcTotals();
-  const { certsTotal, grand } = T;
-  const alerts = getCertAlerts();
-  const totalInt = DB.certs.reduce((a, c) => a + N2(c.total_interest), 0);
-  const totalPaid = DB.certs.reduce((a, c) => a + N2(c.interest_paid), 0);
-  const todayAccrued = DB.certs.reduce((a, c) => a + calcAccruedInterest(c), 0);
+  const now = new Date();
+  const todayStr = today();
+
+  // تقسيم الشهادات: نشطة / منتهية
+  const activeCerts = DB.certs.filter(c => !c.matured_at && c.maturity_date > todayStr);
+  const maturedCerts = DB.certs.filter(c => c.matured_at || c.maturity_date <= todayStr);
+
+  const activeTotal = activeCerts.reduce((a, c) => a + N2(c.amount), 0);
+  const maturedTotal = maturedCerts.reduce((a, c) => a + N2(c.matured_amount || c.amount), 0);
+
+  const totalInt = activeCerts.reduce((a, c) => a + N2(c.total_interest), 0);
+  const totalPaid = activeCerts.reduce((a, c) => a + N2(c.interest_paid), 0);
+  const todayAccrued = activeCerts.reduce((a, c) => a + calcAccruedInterest(c), 0);
+
+  const pendingMaturity = detectMaturedCerts().length;
 
   document.getElementById('cert-kpis').innerHTML =
-    kpi('إجمالي الشهادات', fmt(certsTotal), pct(certsTotal, grand) + ' من المحفظة', 'var(--purple)', svgIcon('<path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/>')) +
+    kpi('الشهادات النشطة', fmt(activeTotal), `${activeCerts.length} شهادة نشطة`, 'var(--purple)', svgIcon('<path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/>')) +
     kpi('مستحق حتى اليوم', fmt(todayAccrued), (todayAccrued / Math.max(1, totalInt) * 100).toFixed(1) + '% من الإجمالي', 'var(--blue)', svgIcon('<circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>')) +
-    kpi('إجمالي الفوائد', fmt(totalInt), 'على مدى المدد كاملة', 'var(--green)', svgIcon('<polyline points="22 7 13.5 15.5 8.5 10.5 2 17"/>')) +
+    kpi('إجمالي الفوائد المتوقعة', fmt(totalInt), 'على مدى المدد كاملة', 'var(--green)', svgIcon('<polyline points="22 7 13.5 15.5 8.5 10.5 2 17"/>')) +
     kpi('فوائد تم صرفها', fmt(totalPaid), (totalPaid / Math.max(1, totalInt) * 100).toFixed(1) + '% من الإجمالي', 'var(--teal)', svgIcon('<polyline points="20 6 9 17 4 12"/>')) +
-    kpi('فوائد متبقية', fmt(totalInt - totalPaid), 'لم يتم صرفها بعد', 'var(--gold)', svgIcon('<circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>')) +
-    kpi('تستحق قريباً', alerts.soon.length + alerts.expired.length, alerts.expired.length ? 'منتهية: ' + alerts.expired.length : 'خلال 30 يوم', alerts.expired.length ? 'var(--red)' : 'var(--gold)', svgIcon('<path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/>'));
+    kpi('فوائد متبقية', fmt(Math.max(0, totalInt - totalPaid)), 'لم يتم صرفها بعد', 'var(--gold)', svgIcon('<circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>')) +
+    (maturedCerts.length > 0 ? kpi('شهادات منتهية', fmt(maturedTotal), `${maturedCerts.length} شهادة`, 'var(--muted)', svgIcon('<polyline points="20 6 9 17 4 12"/>')) : '');
 
   // ─── التنبيهات ───
   let alertsHtml = '';
-  if (alerts.expired.length) {
-    alertsHtml += `<div class="alert alert-danger">
-      <div class="alert-icon"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg></div>
-      <div class="alert-content">
-        <div class="alert-title">شهادات منتهية (${alerts.expired.length})</div>
-        <div class="alert-body">${alerts.expired.map(c => escapeHtml(c.name) + ' — منذ ' + Math.abs(c.daysLeft) + ' يوم').join(' · ')}</div>
-      </div>
-    </div>`;
-  }
-  if (alerts.soon.length) {
-    alertsHtml += `<div class="alert alert-warn">
-      <div class="alert-icon"><svg viewBox="0 0 24 24"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/></svg></div>
-      <div class="alert-content">
-        <div class="alert-title">تستحق خلال 30 يوم</div>
-        <div class="alert-body">${alerts.soon.map(c => escapeHtml(c.name) + ': ' + c.daysLeft + ' يوم').join(' | ')}</div>
-      </div>
-    </div>`;
-  }
-  document.getElementById('cert-alerts').innerHTML = alertsHtml;
 
-  // ─── البطاقات ───
-  const now = new Date();
-  document.getElementById('cert-cards').innerHTML = DB.certs.length ? DB.certs.map(c => {
+  if (pendingMaturity > 0) {
+    alertsHtml += `<div class="alert alert-warn">
+      <div class="alert-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg></div>
+      <div class="alert-content">
+        <div class="alert-title">لديك ${pendingMaturity} شهادة منتهية بحاجة للاسترداد</div>
+        <div class="alert-body">
+          اضغط على الزر لاسترداد الأصل + العائد المتبقي إلى الحساب البنكي المرتبط.
+          <button class="btn btn-success btn-xs" style="margin-top:8px" onclick="processMaturedCertsNow()">
+            استرداد الآن
+          </button>
+        </div>
+      </div>
+    </div>`;
+  }
+
+  const soon = activeCerts.filter(c => {
     const mat = new Date(c.maturity_date);
     const days = Math.ceil((mat - now) / 86400000);
-    const isExpired = days < 0, isSoon = days >= 0 && days <= 30;
+    return days >= 0 && days <= 30;
+  });
+
+  if (soon.length) {
+    alertsHtml += `<div class="alert alert-info">
+      <div class="alert-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg></div>
+      <div class="alert-content">
+        <div class="alert-title">تستحق خلال 30 يوم (${soon.length})</div>
+        <div class="alert-body">${soon.map(c => escapeHtml(c.name) + ': ' + Math.ceil((new Date(c.maturity_date) - now) / 86400000) + ' يوم').join(' · ')}</div>
+      </div>
+    </div>`;
+  }
+
+  document.getElementById('cert-alerts').innerHTML = alertsHtml;
+
+  // ─── بطاقات الشهادات النشطة ───
+  document.getElementById('cert-cards').innerHTML = activeCerts.length ? activeCerts.map(c => {
+    const mat = new Date(c.maturity_date);
+    const days = Math.ceil((mat - now) / 86400000);
+    const isSoon = days >= 0 && days <= 30;
     const periodsMap = { 'سنوي': N2(c.duration), 'شهري': N2(c.duration) * 12, 'أسبوعي': N2(c.duration) * 52, 'يومي': N2(c.duration) * 365 };
     const periods = periodsMap[c.payout_type || 'سنوي'] || N2(c.duration);
     const perPeriod = periods > 0 ? N2(c.total_interest) / periods : 0;
     const remaining = Math.max(0, N2(c.total_interest) - N2(c.interest_paid));
     const accrued = calcAccruedInterest(c);
     const paidPct = N2(c.total_interest) > 0 ? Math.min(100, N2(c.interest_paid) / N2(c.total_interest) * 100) : 0;
-    const statusColor = isExpired ? 'var(--red)' : isSoon ? 'var(--gold)' : 'var(--purple)';
-    const statusLabel = isExpired ? 'منتهية' : isSoon ? days + ' يوم للاستحقاق' : 'نشطة';
+    const statusColor = isSoon ? 'var(--gold)' : 'var(--purple)';
+    const statusLabel = isSoon ? days + ' يوم للاستحقاق' : 'نشطة';
     const attCount = attachmentsCount('certificates', c.id);
+    const bank = DB.banks.find(b => b.id === c.bank_id);
 
     return `<div class="info-card">
       <div class="info-card-strip" style="background:${statusColor}"></div>
@@ -78,12 +103,12 @@ export function renderCerts() {
             <div style="font-weight:800;font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${escapeHtml(c.name)}</div>
             <div style="font-size:10.5px;color:var(--muted)">${escapeHtml(c.bank_name || '—')} • ${escapeHtml(c.payout_type || 'سنوي')}</div>
           </div>
-          <span class="badge" style="background:${statusColor}22;color:${statusColor};font-weight:800;white-space:nowrap">${statusLabel}</span>
+          <span class="badge" style="background:${statusColor}22;color:${statusColor};font-weight:800">${statusLabel}</span>
         </div>
 
         <div>
           <div style="font-size:20px;font-weight:900;color:var(--purple)">${fmt(c.amount)}</div>
-          <div style="font-size:11px;color:var(--muted)">فائدة ${c.rate}% • ${c.duration} سنة (${c.issued_date} → ${c.maturity_date})</div>
+          <div style="font-size:11px;color:var(--muted)">فائدة ${c.rate}% • ${c.duration} سنة (${c.issued_date} ← ${c.maturity_date})</div>
         </div>
 
         <div>
@@ -100,10 +125,15 @@ export function renderCerts() {
           <div>إجمالي الفائدة<div style="color:var(--green);font-weight:700">+${fmt(c.total_interest)}</div></div>
         </div>
 
-        ${attCount > 0 ? `
-          <div style="display:flex;align-items:center;gap:6px;padding-top:8px;border-top:.5px solid var(--border);font-size:11px;color:var(--muted)">
-            📎 ${attCount} مرفق
-          </div>` : ''}
+        ${bank ? `<div style="font-size:10.5px;color:var(--muted);display:flex;align-items:center;gap:4px;padding-top:8px;border-top:.5px solid var(--border)">
+          <span style="width:7px;height:7px;border-radius:50%;background:${bank.color || '#3b82f6'}"></span>
+          ${escapeHtml(bank.name)}
+        </div>` : ''}
+
+        ${attCount > 0 ? `<div style="display:flex;align-items:center;gap:6px;padding-top:8px;border-top:.5px solid var(--border);font-size:11px;color:var(--muted)">
+          ${svgIcon('<path d="M21.44 11.05l-9.19 9.19a6 6 0 01-8.49-8.49l9.19-9.19a4 4 0 015.66 5.66l-9.2 9.19a2 2 0 01-2.83-2.83l8.49-8.48"/>', 12)}
+          ${attCount} مرفق
+        </div>` : ''}
       </div>
       <div class="info-card-footer">
         <button class="btn btn-xs btn-success" onclick="openCertPayout(${c.id})" title="صرف عائد">صرف عائد</button>
@@ -119,12 +149,80 @@ export function renderCerts() {
       </div>
     </div>`;
   }).join('') : `<div class="empty-state" style="padding:48px;text-align:center;color:var(--muted);grid-column:1/-1">
-    <p>لا توجد شهادات مسجلة</p>
+    <p>لا توجد شهادات نشطة</p>
     <button class="btn btn-primary" style="margin-top:14px" onclick="openModal('modal-cert-add')">
-      <svg viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-      إضافة أول شهادة
+      <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+      إضافة شهادة جديدة
     </button>
   </div>`;
+
+  // ─── بطاقات الشهادات المنتهية ───
+  const maturedSection = document.getElementById('cert-matured-section');
+  if (maturedSection) {
+    if (maturedCerts.length) {
+      maturedSection.innerHTML = `
+        <div class="card" style="margin-top:24px">
+          <div class="card-header">
+            <div class="card-title">
+              <div class="card-title-icon" style="background:var(--surface2);color:var(--muted)">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>
+              </div>
+              شهادات منتهية / مُستردّة (${maturedCerts.length})
+            </div>
+          </div>
+          <div class="card-body no-pad">
+            <div class="table-wrap"><table>
+              <thead>
+                <tr>
+                  <th>الشهادة</th>
+                  <th>البنك</th>
+                  <th style="text-align:left;direction:ltr">المبلغ الأصلي</th>
+                  <th style="text-align:left;direction:ltr">مُستردّ</th>
+                  <th>تاريخ الاستحقاق</th>
+                  <th>الحالة</th>
+                  <th>الحساب</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody>
+                ${maturedCerts.map(c => {
+                  const bank = DB.banks.find(b => b.id === c.bank_id);
+                  const isSettled = !!c.matured_at;
+                  const refund = c.matured_amount || (N2(c.amount) + Math.max(0, N2(c.total_interest) - N2(c.interest_paid)));
+                  return `<tr data-row-id="${c.id}">
+                    <td style="font-weight:700">${escapeHtml(c.name)}</td>
+                    <td class="muted">${escapeHtml(c.bank_name || '—')}</td>
+                    <td class="td-num" style="direction:ltr">${fmtN(c.amount)}</td>
+                    <td class="td-num pos" style="direction:ltr">+${fmtN(refund)}</td>
+                    <td>${c.maturity_date}</td>
+                    <td>
+                      ${isSettled
+                        ? `<span class="badge badge-green">مُستردّة</span>`
+                        : `<span class="badge badge-gold">بحاجة للاسترداد</span>`}
+                    </td>
+                    <td class="muted">${bank ? escapeHtml(bank.name) : '—'}</td>
+                    <td class="td-actions">
+                      ${!isSettled ? `
+                        <button class="btn btn-xs btn-success" onclick="processMaturedCertsNow()" title="استرداد الآن">
+                          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
+                          استرداد
+                        </button>
+                      ` : ''}
+                      <button class="btn-icon danger" onclick="deleteCert(${c.id})" title="حذف السجل">
+                        <svg viewBox="0 0 24 24"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6"/></svg>
+                      </button>
+                    </td>
+                  </tr>`;
+                }).join('')}
+              </tbody>
+            </table></div>
+          </div>
+        </div>
+      `;
+    } else {
+      maturedSection.innerHTML = '';
+    }
+  }
 }
 
 // ══════════════════ Actions ══════════════════
@@ -155,7 +253,6 @@ export async function saveCert() {
         name, bank_name, amount, currency, rate, duration,
         issued_date: issued, maturity_date, total_interest, payout_type
       });
-      // حدّث الحركة البنكية المرتبطة (المبلغ/التاريخ)
       if (orig?.bank_transaction_id && (N2(orig.amount) !== amount || orig.issued_date !== issued)) {
         await sbPatch('bank_transactions', orig.bank_transaction_id, {
           amount, date: issued, notes: 'شراء شهادة: ' + name
@@ -214,20 +311,16 @@ export function editCert(id) {
   openModal('modal-cert-add');
 }
 
-// ✅ Undo: حذف شهادة
 export async function deleteCert(id) {
   const cert = DB.certs.find(c => c.id === id);
   if (!cert) return;
   const label = cert.name;
   await deleteWithUndo('certificates', id, label, async () => {
-    // احذف الحركة البنكية المرتبطة
     if (cert.bank_transaction_id) {
       try { await sbDel('bank_transactions', cert.bank_transaction_id); } catch (e) {}
     }
   });
 }
-
-// ─── كسر شهادة ───
 
 export async function doCertBreak() {
   const certId = +document.getElementById('ecb-cert').value;
@@ -270,8 +363,6 @@ export async function doCertBreak() {
     toast('خطأ: ' + e.message, false);
   }
 }
-
-// ─── صرف عائد ───
 
 export async function doCertPayout() {
   const certId = +document.getElementById('ecp-cert-id').value;
@@ -328,8 +419,6 @@ export async function doCertPayout() {
   }
 }
 
-// ─── صرف جماعي ───
-
 export async function doBulkCertPayout() {
   const mode = document.querySelector('input[name="bcp-mode"]:checked')?.value || 'single';
   const checked = [...document.querySelectorAll('.bcp-check:checked')].map(el => +el.dataset.cert);
@@ -381,22 +470,19 @@ export async function doBulkCertPayout() {
   }
 }
 
-// ══════════════════ المرفقات ══════════════════
-
 export function openCertAttachments(certId) {
   const cert = DB.certs.find(c => c.id === certId);
   if (!cert) return;
 
   const html = renderAttachmentsSection('certificates', certId);
 
-  document.getElementById('edit-modal-title').innerHTML = '📎 مرفقات: ' + escapeHtml(cert.name);
+  document.getElementById('edit-modal-title').innerHTML = 'مرفقات: ' + escapeHtml(cert.name);
   document.getElementById('edit-modal-body').innerHTML = `
     <div style="padding:10px 12px;background:var(--surface2);border-radius:var(--radius-sm);margin-bottom:12px;font-size:12px;color:var(--muted)">
       أرفق صورة الشهادة الورقية أو العقد بصيغة PDF لمراجعتها لاحقاً.
     </div>
     ${html}
   `;
-  // اخفِ زر الحفظ (لأن هذه نافذة عرض فقط)
   const saveBtn = document.getElementById('edit-modal-save-btn');
   if (saveBtn) saveBtn.style.display = 'none';
 
