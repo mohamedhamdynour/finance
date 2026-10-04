@@ -73,8 +73,10 @@ export function concentrationAnalysis() {
     const val = v.weight * (getMetalPrice(bt) || v.avgPrice);
     if (val > 0) assets.push({ type: 'معدن', symbol: bt + (v.title ? ' — ' + v.title : ''), value: val, color: '#d97706' });
   });
-  // شهادات
+  // ✅ شهادات نشطة فقط (استبعاد المُستردّة)
   DB.certs.forEach(c => {
+    if (c.matured_at) return;
+    if (c.maturity_date <= new Date().toISOString().slice(0, 10)) return;
     const val = N2(c.amount);
     if (val > 0) assets.push({ type: 'شهادة', symbol: c.name, value: val, color: '#7c3aed' });
   });
