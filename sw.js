@@ -6,7 +6,7 @@
 //    • عند انقطاع الشبكة → تُخدَّم الملفات الثابتة من الكاش
 // ══════════════════════════════════════════════════════════════════
 
-const CACHE_VERSION = 'v4.1.1';
+const CACHE_VERSION = 'v4.5.0';
 const CACHE_NAME = 'portfolio-' + CACHE_VERSION;
 
 const STATIC_ASSETS = [
@@ -73,7 +73,9 @@ const STATIC_ASSETS = [
   './js/ui/pages/tax.js',
   './js/ui/pages/audit.js',
   './js/ui/pages/settings-page.js',
-  './js/ui/pages/heatmap.js'
+  './js/ui/pages/heatmap.js',
+  './js/domain/sharing.js',
+'./js/ui/sharing-setup.js',
 ];
 
 // ─── Install: pre-cache app shell ────────────────────────────────
