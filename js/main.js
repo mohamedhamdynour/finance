@@ -36,6 +36,7 @@ import { installLoanCalcHandlers, renderLoanCalcPage } from './ui/loan-calc.js';
 import * as auditPage from './ui/pages/audit.js';
 import { installAuditHandlers } from './ui/pages/audit.js';
 import * as taxPage from './ui/pages/tax.js';
+import { openCSVImport, installCSVHandlers } from './ui/csv-import.js';
 
 // ─── 2) UI Shared ──────────────────────────────────────────────
 import { toast, installToastGlobal } from './ui/toast.js';
@@ -616,6 +617,7 @@ Object.assign(window, {
   saveForecastSettings: forecastPage.saveForecastSettings,
   window.__setCmpTab = comparisonsPage.setCmpTab;
   window.exportExcel = exportExcel;
+  window.openCSVImport = openCSVImport;
   window.__renameSettingsCurrency = renameSettingsCurrency;
   window.__removeSettingsCurrency = removeSettingsCurrency;
   window.__populateMetalTypeSelect = populateMetalTypeSelect;
@@ -641,6 +643,7 @@ if ('serviceWorker' in navigator && !navigator.serviceWorker.controller) {
 }
 taxPage.installTaxHandlers();
 installAuditHandlers();
+installCSVHandlers();
 installLoanCalcHandlers();
 installNetworkIndicator();
 setupNetworkToasts();
