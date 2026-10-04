@@ -18,6 +18,8 @@ import {
 } from './core/settings.js';
 import { saveCache, loadCache, applyCacheToDB, clearCache, cacheInfo } from './core/cache.js';
 import { isOnline, onNetworkChange } from './core/network.js';
+import { trySendDailySummary, sendUrgentAlerts } from './domain/telegram.js';
+import { installTelegramHandlers } from './ui/telegram-setup.js';
 
 // ─── 2) UI Shared ──────────────────────────────────────────────
 import { toast, installToastGlobal } from './ui/toast.js';
@@ -697,6 +699,14 @@ async function onAuthSuccess() {
   ensureChartLoaded();
   pricesPage.autoFetchExchangeRates(false);
   pricesPage.autoFetchMetalPrices(false);
+
+    // Telegram — الملخص اليومي + التنبيهات الطارئة
+  setTimeout(async () => {
+    try {
+      await trySendDailySummary();
+      await sendUrgentAlerts();
+    } catch (e) { console.warn('[telegram] auto-send failed:', e.message); }
+  }, 5000);
 }
 
 // ══════════════════════════════════════════════════════════════════
@@ -1005,6 +1015,7 @@ installAttachmentHandlers();
 installDetectorHandlers();
 installLoanCalcHandlers();
 installCSVHandlers();
+installTelegramHandlers();
 auditPage.installAuditHandlers();
 taxPage.installTaxHandlers();
 
