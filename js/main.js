@@ -20,6 +20,8 @@ import { saveCache, loadCache, applyCacheToDB, clearCache, cacheInfo } from './c
 import { isOnline, onNetworkChange } from './core/network.js';
 import { trySendDailySummary, sendUrgentAlerts } from './domain/telegram.js';
 import { installTelegramHandlers } from './ui/telegram-setup.js';
+import { acceptPendingInvites, initViewingContext, verifyCurrentContext, getContextUserId } from './domain/sharing.js';
+import { renderSharingCard, installSharingHandlers, updateSharedBanner } from './ui/sharing-setup.js';
 
 // ─── 2) UI Shared ──────────────────────────────────────────────
 import { toast, installToastGlobal } from './ui/toast.js';
@@ -526,6 +528,8 @@ async function runIntegrityCheck() {
 //  loadAll
 // ══════════════════════════════════════════════════════════════════
 async function loadAll(opts = {}) {
+  const ctxUid = getContextUserId();
+  const uidFilter = ctxUid ? `&user_id=eq.${ctxUid}` : '';
   const silent = opts.silent === true;
   const useCache = opts.useCache !== false;
 
@@ -558,23 +562,23 @@ async function loadAll(opts = {}) {
       certs, dividends, recurring, goals, exRates, snapshots, debts, debtPayments,
       installments, installmentPayments, attachments
     ] = await Promise.all([
-      sbGet('banks', '?order=id&deleted_at=is.null'),
-      sbGet('bank_transactions', '?order=date.desc,id.desc&deleted_at=is.null'),
-      sbGet('stock_transactions', '?order=date.asc,id.asc&deleted_at=is.null'),
-      sbGet('stock_prices', '?order=symbol'),
-      sbGet('metal_transactions', '?order=date.asc,id.asc&deleted_at=is.null'),
-      sbGet('metal_prices', '?order=metal_type'),
-      sbGet('certificates', '?order=issued_date.asc&deleted_at=is.null'),
-      sbGet('dividends', '?order=date.desc&deleted_at=is.null'),
-      sbGet('recurring_transactions', '?order=id&deleted_at=is.null'),
-      sbGet('financial_goals', '?order=id&deleted_at=is.null'),
-      sbGet('exchange_rates', '?order=currency'),
-      sbGet('portfolio_snapshots', '?order=snapshot_date.asc&limit=500'),
-      sbGet('debts', '?order=id&deleted_at=is.null'),
-      sbGet('debt_payments', '?order=date.desc&deleted_at=is.null'),
-      sbGet('installments', '?order=id&deleted_at=is.null'),
-      sbGet('installment_payments', '?order=date.desc&deleted_at=is.null'),
-      sbGet('attachments', '?order=created_at.desc&deleted_at=is.null').catch(() => [])
+      sbGet('banks', `?order=id&deleted_at=is.null${uidFilter}`),
+      sbGet('bank_transactions', `?order=date.desc,id.desc&deleted_at=is.null${uidFilter}`),
+      sbGet('stock_transactions', `?order=date.asc,id.asc&deleted_at=is.null${uidFilter}`),
+      sbGet('stock_prices', `?order=symbol${uidFilter}`),
+      sbGet('metal_transactions', `?order=date.asc,id.asc&deleted_at=is.null${uidFilter}`),
+      sbGet('metal_prices', `?order=metal_type${uidFilter}`),
+      sbGet('certificates', `?order=issued_date.asc&deleted_at=is.null${uidFilter}`),
+      sbGet('dividends', `?order=date.desc&deleted_at=is.null${uidFilter}`),
+      sbGet('recurring_transactions', `?order=id&deleted_at=is.null${uidFilter}`),
+      sbGet('financial_goals', `?order=id&deleted_at=is.null${uidFilter}`),
+      sbGet('exchange_rates', `?order=currency${uidFilter}`),
+      sbGet('portfolio_snapshots', `?order=snapshot_date.asc&limit=500${uidFilter}`),
+      sbGet('debts', `?order=id&deleted_at=is.null${uidFilter}`),
+      sbGet('debt_payments', `?order=date.desc&deleted_at=is.null${uidFilter}`),
+      sbGet('installments', `?order=id&deleted_at=is.null${uidFilter}`),
+      sbGet('installment_payments', `?order=date.desc&deleted_at=is.null${uidFilter}`),
+      sbGet('attachments', `?order=created_at.desc&deleted_at=is.null${uidFilter}`).catch(() => [])
     ]);
 
     Object.assign(DB, {
@@ -675,6 +679,18 @@ async function onAuthSuccess() {
   await loadAppSettings();
   populateAllCurrencySelects();
   updateCurrencyLabels();
+
+  // ✅ Multi-user: قبول الدعوات المعلّقة + تهيئة سياق العرض
+  try {
+    const accepted = await acceptPendingInvites();
+    if (accepted > 0) {
+      console.log(`[sharing] accepted ${accepted} invitation(s)`);
+    }
+  } catch (e) { console.warn('[sharing] accept failed:', e.message); }
+
+  initViewingContext();
+  await verifyCurrentContext();
+
   await loadAll();
 
   // معالجة الشهادات المنتهية
