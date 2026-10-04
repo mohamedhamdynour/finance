@@ -89,7 +89,8 @@ export const conn = {
   SB_KEY: '',
   supabaseClient: null,
   authSession: null,
-  settingsBackend: 'local'
+  settingsBackend: 'local',
+  viewingUserId: null 
 };
 
 // ─── سياق التعديل الحالي (Generic Edit Modal) ──────────────────
