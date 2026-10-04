@@ -191,9 +191,16 @@ function renderPage() {
     else if (p === 'tax') taxPage.renderTax();
     else if (p === 'audit') auditPage.renderAudit();
     else if (p === 'settings') {
-      renderSettings();
-      setTimeout(renderPushStatus, 100);
-    }
+  renderSettings();
+  // عرض اسم المستخدم الحالي
+  const uEl = document.getElementById('st-current-user');
+  if (uEl) {
+    uEl.textContent = authSession?.user?.user_metadata?.username
+      || authSession?.user?.email
+      || 'غير معروف';
+  }
+  setTimeout(renderPushStatus, 100);
+}
   } catch (e) {
     console.error('renderPage error on page [' + p + ']:', e);
     toast('خطأ في عرض الصفحة: ' + e.message, false);
