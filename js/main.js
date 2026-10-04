@@ -4,7 +4,7 @@
 
 // ─── 1) Core ────────────────────────────────────────────────────
 import { DB, UI, APP_SETTINGS, CHARTS, conn, editCtx, marketCtx } from './state.js';
-import { N2, fmt, fmtN, fmtK, pct, today, baseCur, escapeHtml, toEGP, periodStart, getBankColor } from './core/utils.js';
+import { N2, fmt, fmtN, fmtK, pct, today, baseCur, escapeHtml, toEGP, fromEGP, toEGPRaw, periodStart, getBankColor } from './core/utils.js';
 import { sbGet, sbPost, sbPatch, sbDel, sbUpsert, sbRpc, sbPatchBy } from './core/supabase.js';
 import {
   initAuthGate, connectSupabase, disconnectSupabase, doLogin, doSignup, doLogout,
