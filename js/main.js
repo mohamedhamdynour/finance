@@ -736,6 +736,7 @@ function exposeGlobals() {
   });
 
   // === Render functions (يحتاجها shared.js و shortcuts.js) ===
+    // === Render functions (يحتاجها shared.js و shortcuts.js) ===
   Object.assign(window, {
     renderBanks: banksPage.renderBanks,
     renderBankTable: banksPage.renderBankTable,
@@ -751,7 +752,16 @@ function exposeGlobals() {
     renderRecent: dashboardPage.renderRecent,
     renderStockHeatmap: heatmapPage.renderStockHeatmap,
     renderZakat: zakatPage.renderZakat,
-    renderSettings
+    renderSettings,
+    // ← 8 إضافات جديدة:
+    renderDebts: debtsPage.renderDebts,
+    renderInstallments: installmentsPage.renderInstallments,
+    renderForecast: forecastPage.renderForecast,
+    renderRisk: riskPage.renderRisk,
+    renderRebalancing: rebalancingPage.renderRebalancing,
+    renderComparisons: comparisonsPage.renderComparisons,
+    renderTax: taxPage.renderTax,
+    renderAudit: auditPage.renderAudit
   });
 
   // Banks
