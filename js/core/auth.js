@@ -5,6 +5,7 @@
 import { conn } from '../state.js';
 import { friendlyError } from './errors.js';
 import { initFromStorage, connect, disconnect } from './supabase.js';
+import { clearCache } from './cache.js';
 
 // ─── callback يُسجِّله main.js ليُشغّل loadAll بعد نجاح الدخول ──
 let _onAuthSuccess = null;
@@ -119,6 +120,8 @@ export async function doLogin() {
 export async function doLogout() {
   if (!confirm('تسجيل الخروج؟')) return;
   try { if (conn.supabaseClient) await conn.supabaseClient.auth.signOut(); } catch (e) {}
+  try { await clearCache(); } catch (e) {}
+  localStorage.removeItem('viewingContextUid');
   conn.authSession = null;
   location.reload();
 }

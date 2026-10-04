@@ -90,7 +90,8 @@ export const conn = {
   supabaseClient: null,
   authSession: null,
   settingsBackend: 'local',
-  viewingUserId: null 
+  viewingUserId: null,
+  viewingRole: null
 };
 
 // ─── سياق التعديل الحالي (Generic Edit Modal) ──────────────────

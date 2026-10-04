@@ -3,9 +3,16 @@
 //  مسؤول عن: قراءة/حفظ رابط ومفتاح المشروع، إرسال الطلبات، RPC
 // ══════════════════════════════════════════════════════════════════
 import { conn } from '../state.js';
-import { retryWithBackoff, isNetworkError } from './network.js';
+import { retryWithBackoff } from './network.js';
 
 const STORAGE_KEYS = { url: 'sb_url', key: 'sb_key' };
+const USER_SCOPED_TABLES = new Set([
+  'banks', 'bank_transactions', 'stock_transactions', 'stock_prices',
+  'metal_transactions', 'metal_prices', 'certificates', 'dividends',
+  'recurring_transactions', 'financial_goals', 'exchange_rates',
+  'portfolio_snapshots', 'debts', 'debt_payments', 'app_settings',
+  'audit_log', 'installments', 'installment_payments', 'attachments'
+]);
 
 // ─── تحميل القيم من localStorage عند بدء التطبيق ──────────────
 export function initFromStorage() {
@@ -24,6 +31,26 @@ export function authHeaders() {
   };
 }
 
+function getContextUserIdForFilter() {
+  const ctxUid = conn.viewingUserId;
+  const myUid = conn.authSession?.user?.id;
+  if (!ctxUid || !myUid || ctxUid === myUid) return null;
+  return ctxUid;
+}
+
+function appendUserFilter(path, tableName) {
+  const ctxUid = getContextUserIdForFilter();
+  if (!ctxUid || !USER_SCOPED_TABLES.has(tableName)) return path;
+  if (/[?&]user_id=eq\./.test(path)) return path;
+  return path + (path.includes('?') ? '&' : '?') + 'user_id=eq.' + encodeURIComponent(ctxUid);
+}
+
+function ensureContextWriteAllowed(tableName) {
+  if (getContextUserIdForFilter() && conn.viewingRole === 'viewer' && USER_SCOPED_TABLES.has(tableName)) {
+    throw new Error('الوضع الحالي للعرض فقط — لا يمكنك التعديل على هذه المحفظة');
+  }
+}
+
 // ─── الطلب الأساسي ─────────────────────────────────────────────
 export async function api(path, method = 'GET', body = null, opts = {}) {
   const fetchOnce = async () => {
@@ -31,9 +58,9 @@ export async function api(path, method = 'GET', body = null, opts = {}) {
   const timer = setTimeout(() => controller.abort(), 15000); // 15 ثانية timeout
 
   try {
-    const r = await fetch(conn.SB_URL + '/rest/v1/' + path, {
+    const r = await fetch(conn.SB_URL + (opts.basePath || '/rest/v1/') + path, {
       method,
-      headers: authHeaders(),
+      headers: { ...authHeaders(), ...(opts.headers || {}) },
       signal: controller.signal,
       ...(body ? { body: JSON.stringify(body) } : {})
     });
@@ -78,7 +105,7 @@ export async function api(path, method = 'GET', body = null, opts = {}) {
 }
 
 // ─── اختصارات CRUD ─────────────────────────────────────────────
-export const sbGet = (t, q = '') => api(t + q);
+export const sbGet = (t, q = '') => api(appendUserFilter(t + q, t));
 
 function injectUserContext(body) {
   if (!body) return body;
@@ -88,64 +115,55 @@ function injectUserContext(body) {
 
   if (Array.isArray(body)) {
     return body.map(row => {
-      if (row && typeof row === 'object' && !row.user_id) {
+      if (row && typeof row === 'object') {
         return { ...row, user_id: ctxUid };
       }
       return row;
     });
   }
-  if (typeof body === 'object' && !body.user_id) {
+  if (typeof body === 'object') {
     return { ...body, user_id: ctxUid };
   }
   return body;
 }
 
-export const sbPost = (t, b) => api(t, 'POST', injectUserContext(b));
-export const sbPatch = (t, id, b) => api(t + '?id=eq.' + id, 'PATCH', b);
-export const sbDel = (t, id) => api(t + '?id=eq.' + id, 'DELETE');
+export const sbPost = (t, b) => {
+  ensureContextWriteAllowed(t);
+  return api(t, 'POST', injectUserContext(b));
+};
+export const sbPatch = (t, id, b) => {
+  ensureContextWriteAllowed(t);
+  return api(appendUserFilter(t + '?id=eq.' + id, t), 'PATCH', b);
+};
+export const sbDel = (t, id) => {
+  ensureContextWriteAllowed(t);
+  return api(appendUserFilter(t + '?id=eq.' + id, t), 'DELETE');
+};
+export const sbDelBy = (t, filter) => {
+  ensureContextWriteAllowed(t);
+  return api(appendUserFilter(t + '?' + filter, t), 'DELETE');
+};
 
 // ─── Upsert (INSERT مع merge-duplicates) ──────────────────────
 export async function sbUpsert(t, b) {
+  ensureContextWriteAllowed(t);
   const body = injectUserContext(b);
-  const r = await fetch(conn.SB_URL + '/rest/v1/' + t, {
-    method: 'POST',
-    headers: { ...authHeaders(), 'Prefer': 'return=representation,resolution=merge-duplicates' },
-    body: JSON.stringify(body)
+  return api(t, 'POST', body, {
+    headers: { 'Prefer': 'return=representation,resolution=merge-duplicates' }
   });
-  const j = await r.json();
-  if (!r.ok) {
-    const e = new Error(j.message || JSON.stringify(j));
-    e.code = j.code;
-    throw e;
-  }
-  return j;
 }
 
 // ─── استدعاء دالة Postgres (RPC) ──────────────────────────────
 export async function sbRpc(fn, args) {
-  const r = await fetch(conn.SB_URL + '/rest/v1/rpc/' + fn, {
-    method: 'POST',
-    headers: authHeaders(),
-    body: JSON.stringify(args || {})
-  });
-  if (r.status === 204) return null;
-  const j = await r.json().catch(() => ({}));
-  if (!r.ok) throw new Error(j?.message || j?.hint || JSON.stringify(j));
-  return j;
+  return api('rpc/' + fn, 'POST', args || {});
 }
 
 // ─── PATCH بفلتر مخصص (للجداول بدون عمود id) ──────────────────
 // مثال: sbPatchBy('app_settings', 'user_id=eq.' + uid, { value: {...} })
 export async function sbPatchBy(t, filter, b) {
-  const r = await fetch(conn.SB_URL + '/rest/v1/' + t + '?' + filter, {
-    method: 'PATCH',
-    headers: authHeaders(),
-    body: JSON.stringify(b)
-  });
-  if (r.status === 204) return null;
-  const j = await r.json().catch(() => ({}));
-  if (!r.ok) throw new Error(j?.message || JSON.stringify(j));
-  return j;
+  ensureContextWriteAllowed(t);
+  const path = appendUserFilter(t + '?' + filter, t);
+  return api(path, 'PATCH', b);
 }
 
 // ─── إنشاء العميل (supabase-js) ────────────────────────────────
