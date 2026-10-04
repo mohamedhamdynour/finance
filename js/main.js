@@ -1,70 +1,57 @@
 // ══════════════════════════════════════════════════════════════════
-//  main.js — نقطة الدخول وربط الوحدات
+//  main.js — نقطة الدخول والمنسّق العام
+//  يُثبِّت كل الوحدات، يربط window.*، ويشغّل التطبيق.
 // ══════════════════════════════════════════════════════════════════
 
 // ─── 1) Core ────────────────────────────────────────────────────
 import { DB, UI, APP_SETTINGS, CHARTS, conn, editCtx, marketCtx } from './state.js';
-import { N2, fmt, fmtN, pct, today, baseCur, escapeHtml, toEGP, periodStart } from './core/utils.js';
+import { N2, fmt, fmtN, fmtK, pct, today, baseCur, escapeHtml, toEGP, periodStart, getBankColor, debounce } from './core/utils.js';
 import { sbGet, sbPost, sbPatch, sbDel, sbUpsert, sbRpc, sbPatchBy } from './core/supabase.js';
 import {
   initAuthGate, connectSupabase, disconnectSupabase, doLogin, doSignup, doLogout,
   setAuthTab, setAuthSuccessHandler, isAuthenticated, getCurrentUser
 } from './core/auth.js';
-import { openGlobalSearch, closeGlobalSearch } from './ui/search.js';
 import {
   loadAppSettings, persistAppSettings, populateAllCurrencySelects,
   updateCurrencyLabels, renderSettings, renderSchemaAlert,
   addSettingsCurrency, renameSettingsCurrency, removeSettingsCurrency,
   saveGeneralSettings, saveGoldApiKey, populateMetalTypeSelect, onMetalTypeChange
 } from './core/settings.js';
-import { showAllSkeletons, hideAllSkeletons } from './ui/skeleton.js';
 import { saveCache, loadCache, applyCacheToDB, clearCache, cacheInfo } from './core/cache.js';
-import { ensureChartLoaded } from './ui/charts.js';
-import { installNetworkIndicator, setupNetworkToasts } from './ui/network-indicator.js';
-import { isOnline } from './core/network.js';
-import * as installmentsPage from './ui/pages/installments.js';
-import * as rebalancingPage from './ui/pages/rebalancing.js';
-import * as riskPage from './ui/pages/risk.js';
-import * as forecastPage from './ui/pages/forecast.js';
-import { installAttachmentHandlers } from './ui/attachments.js';
-import { attachmentsCount } from './domain/attachments.js';
-import { exportExcel } from './core/excel.js';
-import { autoApplyRecurring, notifyAutoRecurringResult } from './domain/auto-recurring.js';
-import * as comparisonsPage from './ui/pages/comparisons.js';
-import { installDetectorHandlers } from './ui/recurring-detector.js';
-import { installLoanCalcHandlers, renderLoanCalcPage } from './ui/loan-calc.js';
-import * as auditPage from './ui/pages/audit.js';
-import { installAuditHandlers } from './ui/pages/audit.js';
-import * as taxPage from './ui/pages/tax.js';
-import { openCSVImport, installCSVHandlers } from './ui/csv-import.js';
-import { extractText, parseReceipt } from './domain/ocr.js';
-import {
-  subscribeToPush, unsubscribeFromPush, getCurrentSubscription,
-  sendTestNotification, isPushSupported, isPushConfigured, getPermissionState
-} from './core/push.js';
+import { isOnline, onNetworkChange } from './core/network.js';
 
 // ─── 2) UI Shared ──────────────────────────────────────────────
 import { toast, installToastGlobal } from './ui/toast.js';
-import { destroyChart } from './ui/charts.js';
+import { destroyChart, ensureChartLoaded } from './ui/charts.js';
 import {
   kpi, svgIcon, typeTag, populateSelect, previewBox,
   getCertAlerts, updateBadges,
   setBankSort, setBankTxnFilter, switchBankTab, setStockMarket,
-  setPeriodFromSelect, applyGlobalCustomRange,
-  getReportPeriodBounds
+  setPeriodFromSelect, applyGlobalCustomRange, getReportPeriodBounds
 } from './ui/shared.js';
 import {
   openModal, closeModal,
   updateDepPreview, updateWitPreview, updateTransferPreview,
-  updateBuyPreview, updateSellPreview, updateMetalBuyPreview, updateMetalSellPreview,
+  updateBuyPreview, updateSellPreview,
+  updateMetalBuyPreview, updateMetalSellPreview,
   updateCertPreview, updateCertBreakPreview,
   setCertPayoutMode, setBulkCertMode, setDividendMode
 } from './ui/modals.js';
 import { updateNotificationBell, toggleNotifications } from './ui/notifications.js';
 import { saveEdit } from './ui/save-edit.js';
+import { showAllSkeletons, hideAllSkeletons } from './ui/skeleton.js';
+import { installShortcuts } from './ui/shortcuts.js';
+import { openGlobalSearch, closeGlobalSearch } from './ui/search.js';
+import { installNetworkIndicator, setupNetworkToasts } from './ui/network-indicator.js';
+import { installAttachmentHandlers } from './ui/attachments.js';
+import { installDetectorHandlers } from './ui/recurring-detector.js';
+import { installLoanCalcHandlers } from './ui/loan-calc.js';
+import { openCSVImport, installCSVHandlers } from './ui/csv-import.js';
 
 // ─── 3) Domain ──────────────────────────────────────────────────
 import { calcTotals, nextRecDate } from './domain/calc.js';
+import { autoApplyRecurring, notifyAutoRecurringResult } from './domain/auto-recurring.js';
+import { extractText, parseReceipt } from './domain/ocr.js';
 
 // ─── 4) Pages ───────────────────────────────────────────────────
 import * as banksPage from './ui/pages/banks.js';
@@ -72,6 +59,7 @@ import * as stocksPage from './ui/pages/stocks.js';
 import * as metalsPage from './ui/pages/metals.js';
 import * as certsPage from './ui/pages/certs.js';
 import * as debtsPage from './ui/pages/debts.js';
+import * as installmentsPage from './ui/pages/installments.js';
 import * as recurringPage from './ui/pages/recurring.js';
 import * as goalsPage from './ui/pages/goals.js';
 import * as pricesPage from './ui/pages/prices.js';
@@ -79,19 +67,36 @@ import * as dashboardPage from './ui/pages/dashboard.js';
 import * as heatmapPage from './ui/pages/heatmap.js';
 import * as reportsPage from './ui/pages/reports.js';
 import * as zakatPage from './ui/pages/zakat.js';
+import * as riskPage from './ui/pages/risk.js';
+import * as rebalancingPage from './ui/pages/rebalancing.js';
+import * as forecastPage from './ui/pages/forecast.js';
+import * as comparisonsPage from './ui/pages/comparisons.js';
+import * as taxPage from './ui/pages/tax.js';
+import * as auditPage from './ui/pages/audit.js';
+
+// ══════════════════════════════════════════════════════════════════
+//  Icon helpers (SVG فقط، لا Emoji)
+// ══════════════════════════════════════════════════════════════════
+const ICON = {
+  sun:    '<circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/>',
+  moon:   '<path d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z"/>',
+  help:   '<circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 015.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/>',
+  code:   '<polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/>',
+  copy:   '<rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/>'
+};
+
+const svg = (path, size = 16, extra = '') =>
+  `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" ${extra}>${path}</svg>`;
 
 // ══════════════════════════════════════════════════════════════════
 //  Theme
 // ══════════════════════════════════════════════════════════════════
-const SUN_PATH = '<circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/>';
-const MOON_PATH = '<path d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z"/>';
-
 function toggleDark() {
   document.body.classList.toggle('dark');
   const dk = document.body.classList.contains('dark');
   document.querySelectorAll('select,input').forEach(s => s.style.colorScheme = dk ? 'dark' : 'light');
   localStorage.setItem('darkMode', dk ? '1' : '0');
-  const iconPath = dk ? SUN_PATH : MOON_PATH;
+  const iconPath = dk ? ICON.sun : ICON.moon;
   ['dark-icon', 'topbar-dark-icon'].forEach(id => {
     const el = document.getElementById(id);
     if (el) el.innerHTML = iconPath;
@@ -107,7 +112,7 @@ function initDarkMode() {
     document.querySelectorAll('select,input').forEach(s => s.style.colorScheme = 'dark');
     ['dark-icon', 'topbar-dark-icon'].forEach(id => {
       const el = document.getElementById(id);
-      if (el) el.innerHTML = SUN_PATH;
+      if (el) el.innerHTML = ICON.sun;
     });
     const dt = document.getElementById('dark-text');
     if (dt) dt.textContent = 'نهاري';
@@ -126,26 +131,25 @@ function toggleSidebar() {
 }
 
 const PAGE_TITLES = {
-  dashboard: ['لوحة التحكم', 'نظرة شاملة على محفظتك'],
-  banks: ['الحسابات البنكية', 'إدارة أرصدتك وحركاتك'],
-  stocks: ['الأسهم والصناديق', 'تتبع حيازاتك وأرباحك'],
-  metals: ['المعادن الثمينة', 'الذهب والفضة والبلاتين'],
-  certs: ['الشهادات الادخارية', 'عوائدك الثابتة'],
-  debts: ['الديون والالتزامات', 'ما عليك وما لك'],
-  recurring: ['العمليات المتكررة', 'أتمتة معاملاتك'],
-  goals: ['الأهداف المالية', 'خططك المستقبلية'],
-  prices: ['تحديث الأسعار', 'أسعار السوق الحالية'],
-  reports: ['التقارير والتحليل', 'تحليل شامل لمحفظتك'],
-  zakat: ['الزكاة', 'حساب الزكاة الشرعية'],
-  settings: ['الإعدادات', 'ضبط متغيرات المحفظة'],
-  installments: ['الأقساط والالتزامات المقسّمة', 'تتبع أقساطك ودفعاتك'],
-  rebalancing: ['إعادة توازن المحفظة', 'قارن توزيعك الحالي بالمستهدف'],
-  risk: ['تحليل المخاطر', 'قياس كمي لمخاطر محفظتك'],
-  forecast: ['التوقعات المالية', 'تنبؤ بمستقبل محفظتك'],
-  comparisons: ['المقارنات الزمنية', 'تحليل MoM / QoQ / YoY'],
-  audit: ['سجل التغييرات', 'كل التعديلات على قاعدة البيانات'],
-  tax: ['الضرائب', 'ضريبة أرباح رأس المال والتوزيعات'],
-
+  dashboard:     ['لوحة التحكم',        'نظرة شاملة على محفظتك'],
+  banks:         ['الحسابات البنكية',   'إدارة أرصدتك وحركاتك'],
+  stocks:        ['الأسهم والصناديق',   'تتبع حيازاتك وأرباحك'],
+  metals:        ['المعادن الثمينة',    'الذهب والفضة والبلاتين'],
+  certs:         ['الشهادات الادخارية', 'عوائدك الثابتة'],
+  debts:         ['الديون والالتزامات', 'ما عليك وما لك'],
+  installments:  ['الأقساط',            'الالتزامات المقسَّطة'],
+  recurring:     ['العمليات المتكررة',  'أتمتة معاملاتك'],
+  goals:         ['الأهداف المالية',    'خططك المستقبلية'],
+  forecast:      ['التوقعات',           'تنبؤ بمستقبل محفظتك'],
+  risk:          ['تحليل المخاطر',      'قياس كمي للمخاطر'],
+  rebalancing:   ['إعادة التوازن',      'طابق توزيعك مع المستهدف'],
+  comparisons:   ['المقارنات الزمنية',  'تحليل الأداء بمرور الوقت'],
+  prices:        ['تحديث الأسعار',      'أسعار السوق الحالية'],
+  reports:       ['التقارير والتحليل',  'تحليل شامل لمحفظتك'],
+  zakat:         ['الزكاة',             'حساب الزكاة الشرعية'],
+  tax:           ['الضرائب',            'ضريبة الأرباح والتوزيعات'],
+  audit:         ['سجل التغييرات',      'كل التعديلات على البيانات'],
+  settings:      ['الإعدادات',          'ضبط متغيرات المحفظة']
 };
 
 function nav(page) {
@@ -171,24 +175,237 @@ function renderPage() {
     else if (p === 'certs') certsPage.renderCerts();
     else if (p === 'debts') debtsPage.renderDebts();
     else if (p === 'installments') installmentsPage.renderInstallments();
-    else if (p === 'rebalancing') rebalancingPage.renderRebalancing();
     else if (p === 'recurring') recurringPage.renderRecurring();
     else if (p === 'goals') goalsPage.renderGoals();
+    else if (p === 'forecast') forecastPage.renderForecast();
+    else if (p === 'risk') riskPage.renderRisk();
+    else if (p === 'rebalancing') rebalancingPage.renderRebalancing();
+    else if (p === 'comparisons') comparisonsPage.renderComparisons();
     else if (p === 'prices') pricesPage.renderPrices();
     else if (p === 'reports') reportsPage.renderReports();
-    else if (p === 'risk') riskPage.renderRisk();
-    else if (p === 'audit') auditPage.renderAudit();
-    else if (p === 'tax') taxPage.renderTax();
     else if (p === 'zakat') zakatPage.renderZakat();
-    else if (p === 'forecast') forecastPage.renderForecast();
+    else if (p === 'tax') taxPage.renderTax();
+    else if (p === 'audit') auditPage.renderAudit();
     else if (p === 'settings') {
       renderSettings();
       setTimeout(renderPushStatus, 100);
     }
-    else if (p === 'comparisons') comparisonsPage.renderComparisons();
   } catch (e) {
     console.error('renderPage error on page [' + p + ']:', e);
     toast('خطأ في عرض الصفحة: ' + e.message, false);
+  }
+}
+
+// ══════════════════════════════════════════════════════════════════
+//  Help & SQL Modals
+// ══════════════════════════════════════════════════════════════════
+
+function openHelpModal() {
+  const titleEl = document.getElementById('edit-modal-title');
+  const bodyEl = document.getElementById('edit-modal-body');
+  const saveBtn = document.getElementById('edit-modal-save-btn');
+  if (!titleEl || !bodyEl) return;
+
+  titleEl.innerHTML = svg(ICON.help, 18) + ' دليل الاستخدام';
+  saveBtn.style.display = 'none';
+
+  bodyEl.innerHTML = `
+    <div style="line-height:1.9;font-size:13px;color:var(--text)">
+      <section style="margin-bottom:18px">
+        <h3 style="font-size:14px;font-weight:900;margin-bottom:8px;color:var(--blue);display:flex;align-items:center;gap:6px">
+          ${svg('<circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/>', 16)}
+          ما هو هذا التطبيق؟
+        </h3>
+        <p style="color:var(--muted)">نظام شخصي لإدارة محفظتك المالية بالكامل من المتصفح. يعمل مباشرة مع قاعدة بياناتك على Supabase بدون أي خادم وسيط — بياناتك ملكك وحدك.</p>
+      </section>
+
+      <section style="margin-bottom:18px">
+        <h3 style="font-size:14px;font-weight:900;margin-bottom:8px;color:var(--green);display:flex;align-items:center;gap:6px">
+          ${svg('<polyline points="22 7 13.5 15.5 8.5 10.5 2 17"/>', 16)}
+          الميزات الرئيسية
+        </h3>
+        <ul style="color:var(--muted);padding-right:20px;margin:0">
+          <li>تتبع الحسابات البنكية والحركات بالتفصيل</li>
+          <li>إدارة حيازات الأسهم والصناديق مع حساب الأرباح والخسائر</li>
+          <li>تتبع المعادن الثمينة (ذهب، فضة، ...) بالوزن والسعر</li>
+          <li>الشهادات الادخارية مع جدول دفعات العائد</li>
+          <li>الديون والأقساط مع التنبيهات التلقائية</li>
+          <li>التحليل: المخاطر، التوقعات، المقارنات الزمنية</li>
+          <li>حساب الزكاة الشرعية والضرائب</li>
+          <li>تصدير Excel و PDF للتقارير</li>
+          <li>عمل بدون إنترنت (PWA) مع مزامنة تلقائية</li>
+          <li>متعدد العملات مع تحويل تلقائي</li>
+        </ul>
+      </section>
+
+      <section style="margin-bottom:18px">
+        <h3 style="font-size:14px;font-weight:900;margin-bottom:8px;color:var(--gold);display:flex;align-items:center;gap:6px">
+          ${svg('<polyline points="20 6 9 17 4 12"/>', 16)}
+          كيف تبدأ؟
+        </h3>
+        <ol style="color:var(--muted);padding-right:20px;margin:0">
+          <li>سجّل حسابك ثم سجّل دخولك</li>
+          <li>افتح صفحة "الحسابات البنكية" وأضف أول حساب</li>
+          <li>أضف الحركات أو استوردها من كشف CSV</li>
+          <li>أضف أسهمك، معادنك، شهاداتك تدريجياً</li>
+          <li>حدّث الأسعار دورياً من صفحة "تحديث الأسعار"</li>
+        </ol>
+      </section>
+
+      <section style="margin-bottom:18px">
+        <h3 style="font-size:14px;font-weight:900;margin-bottom:8px;color:var(--purple);display:flex;align-items:center;gap:6px">
+          ${svg('<rect x="2" y="4" width="20" height="16" rx="2"/><line x1="6" y1="8" x2="6" y2="8"/>', 16)}
+          اختصارات لوحة المفاتيح
+        </h3>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;font-size:12px">
+          ${[
+            ['Ctrl + K', 'البحث الشامل'],
+            ['Ctrl + N', 'إيداع سريع'],
+            ['Ctrl + D', 'لوحة التحكم'],
+            ['Ctrl + B', 'الحسابات البنكية'],
+            ['Ctrl + /', 'الوضع الليلي'],
+            ['?', 'هذه القائمة']
+          ].map(([k, v]) => `
+            <div style="display:flex;justify-content:space-between;padding:5px 10px;background:var(--surface2);border-radius:6px;color:var(--muted)">
+              <span>${v}</span>
+              <kbd style="font-family:monospace;direction:ltr;color:var(--text);font-weight:700">${k}</kbd>
+            </div>
+          `).join('')}
+        </div>
+      </section>
+
+      <section>
+        <h3 style="font-size:14px;font-weight:900;margin-bottom:8px;color:var(--teal);display:flex;align-items:center;gap:6px">
+          ${svg('<path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>', 16)}
+          الخصوصية والأمان
+        </h3>
+        <ul style="color:var(--muted);padding-right:20px;margin:0">
+          <li>بياناتك محفوظة على مشروع Supabase الخاص بك</li>
+          <li>كل مستخدم يرى بياناته فقط (RLS مُفعَّلة)</li>
+          <li>لا يتم إرسال أي بيانات لأي جهة خارجية</li>
+          <li>يمكنك تصدير نسخة احتياطية في أي وقت</li>
+        </ul>
+      </section>
+    </div>
+  `;
+
+  openModal('modal-edit');
+}
+
+async function openSqlModal() {
+  const titleEl = document.getElementById('edit-modal-title');
+  const bodyEl = document.getElementById('edit-modal-body');
+  const saveBtn = document.getElementById('edit-modal-save-btn');
+  if (!titleEl || !bodyEl) return;
+
+  titleEl.innerHTML = svg(ICON.code, 18) + ' كود قاعدة البيانات الكامل';
+  saveBtn.style.display = 'none';
+  bodyEl.innerHTML = `<div style="text-align:center;padding:40px;color:var(--muted)">
+    ${svg('<circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>', 32, 'style="opacity:.4;margin-bottom:10px"')}
+    <div>جاري تحميل الكود...</div>
+  </div>`;
+
+  openModal('modal-edit');
+
+  try {
+    const res = await fetch('schema.sql?v=' + Date.now());
+    if (!res.ok) throw new Error('تعذّر تحميل ملف schema.sql');
+    const sql = await res.text();
+
+    bodyEl.innerHTML = `
+      <div style="font-size:12.5px;color:var(--muted);margin-bottom:12px;line-height:1.7;padding:12px;background:var(--blue-l);border-radius:8px;border-right:3px solid var(--blue)">
+        <strong style="color:var(--blue)">الخطوات:</strong>
+        <ol style="margin:6px 18px 0;padding:0">
+          <li>افتح مشروعك في supabase.com</li>
+          <li>اذهب إلى SQL Editor → New query</li>
+          <li>الصق الكود التالي وشغّله (Run)</li>
+        </ol>
+      </div>
+      <div style="position:relative;margin-bottom:12px">
+        <button class="btn btn-primary btn-sm" onclick="window.__copySqlContent()" style="position:absolute;top:10px;left:10px;z-index:2">
+          ${svg(ICON.copy, 13)}
+          نسخ الكود
+        </button>
+      </div>
+      <pre id="sql-content" style="background:#0f1729;color:#f0f4ff;padding:16px;border-radius:10px;font-size:11px;direction:ltr;text-align:left;overflow:auto;max-height:440px;line-height:1.55;font-family:'SF Mono',Consolas,monospace;border:.5px solid var(--border)">${escapeHtml(sql)}</pre>
+      <div class="form-hint" style="margin-top:10px;text-align:center">
+        ملاحظة: تشغيل الكود يحذف الجداول القديمة ويعيد إنشاءها. خذ نسخة احتياطية أولاً إن لزم.
+      </div>
+    `;
+  } catch (e) {
+    bodyEl.innerHTML = `<div style="text-align:center;padding:40px;color:var(--red)">
+      ${svg('<circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/>', 32, 'style="opacity:.5;margin-bottom:10px"')}
+      <div style="font-weight:700">فشل التحميل: ${escapeHtml(e.message)}</div>
+      <div style="font-size:11.5px;color:var(--muted);margin-top:8px">تأكد من وجود ملف <code>schema.sql</code> في جذر المشروع</div>
+    </div>`;
+  }
+}
+
+function installHelpAndSqlHandlers() {
+  window.openHelpModal = openHelpModal;
+  window.openSqlModal = openSqlModal;
+  window.__copySqlContent = () => {
+    const el = document.getElementById('sql-content');
+    if (!el) return;
+    const text = el.textContent;
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text).then(() => toast('تم نسخ كود SQL ✓'))
+        .catch(() => fallbackCopy(text));
+    } else {
+      fallbackCopy(text);
+    }
+  };
+  function fallbackCopy(text) {
+    const ta = document.createElement('textarea');
+    ta.value = text;
+    ta.style.cssText = 'position:fixed;left:-9999px';
+    document.body.appendChild(ta);
+    ta.select();
+    try { document.execCommand('copy'); toast('تم نسخ كود SQL ✓'); }
+    catch (e) { toast('فشل النسخ', false); }
+    ta.remove();
+  }
+}
+
+// ══════════════════════════════════════════════════════════════════
+//  Push Notifications status
+// ══════════════════════════════════════════════════════════════════
+async function renderPushStatus() {
+  const el = document.getElementById('push-status');
+  if (!el) return;
+
+  try {
+    const push = await import('./core/push.js');
+    const { isPushSupported, isPushConfigured, getPermissionState, getCurrentSubscription } = push;
+
+    if (!isPushSupported()) {
+      el.innerHTML = `<div style="padding:10px;background:var(--red-l);color:var(--red-d);border-radius:8px;font-size:12px">الإشعارات غير مدعومة في هذا المتصفح</div>`;
+      return;
+    }
+    if (!isPushConfigured()) {
+      el.innerHTML = `<div style="padding:12px;background:var(--gold-l);color:var(--gold-d);border-radius:8px;font-size:12px;line-height:1.7">
+        <strong>يحتاج الإعداد:</strong>
+        <div style="margin-top:4px">أضف VAPID Public Key في <code>js/core/push.js</code> لتفعيل الإشعارات</div>
+      </div>`;
+      return;
+    }
+
+    const perm = getPermissionState();
+    const sub = await getCurrentSubscription();
+
+    if (perm === 'denied') {
+      el.innerHTML = `<div style="padding:10px;background:var(--red-l);color:var(--red-d);border-radius:8px;font-size:12px">تم رفض الإذن — يمكنك إعادة تفعيله من إعدادات المتصفح</div>`;
+    } else if (sub) {
+      el.innerHTML = `<div style="padding:10px 14px;background:var(--green-l);color:var(--green-d);border-radius:8px;font-size:12px;display:flex;align-items:center;gap:8px">
+        ${svg('<polyline points="20 6 9 17 4 12"/>', 14)}
+        <span>الإشعارات مفعّلة على هذا الجهاز</span>
+      </div>`;
+    } else {
+      el.innerHTML = `<div style="padding:10px;background:var(--surface2);color:var(--muted);border-radius:8px;font-size:12px">لم يتم التفعيل بعد</div>`;
+    }
+  } catch (e) {
+    console.warn('[push-status]', e.message);
+    el.innerHTML = '';
   }
 }
 
@@ -199,22 +416,23 @@ async function saveSnapshot() {
   const t = calcTotals();
   const snap = {
     snapshot_date: today(),
-    total_banks: t.totalBanks, total_stocks: t.stocksVal,
-    total_metals: t.metalsVal, total_certs: t.certsTotal,
+    total_banks: t.totalBanks,
+    total_stocks: t.stocksVal,
+    total_metals: t.metalsVal,
+    total_certs: t.certsTotal,
     grand_total: t.grand
   };
   try { await sbUpsert('portfolio_snapshots', snap); } catch (e) {}
 }
 
 // ══════════════════════════════════════════════════════════════════
-//  Integrity check (مبسّطة — trigger يتولى الرصيد)
+//  Integrity Check
 // ══════════════════════════════════════════════════════════════════
 async function runIntegrityCheck() {
   let fixed = 0;
   const bankTxnIds = new Set(DB.bankTxns.map(t => t.id));
   const bankIds = new Set(DB.banks.map(b => b.id));
 
-  // 1-3) مراجع بنكية معطوبة في الأسهم/المعادن/الشهادات
   for (const t of DB.stockTxns) {
     if (t.bank_transaction_id && !bankTxnIds.has(t.bank_transaction_id)) {
       try { await sbPatch('stock_transactions', t.id, { bank_transaction_id: null }); fixed++; } catch (e) {}
@@ -230,16 +448,15 @@ async function runIntegrityCheck() {
       try { await sbPatch('certificates', c.id, { bank_transaction_id: null }); fixed++; } catch (e) {}
     }
   }
-  // 4) حركات بنكية لبنوك غير موجودة
   for (const t of DB.bankTxns.filter(t => !bankIds.has(t.bank_id))) {
     try { await sbDel('bank_transactions', t.id); fixed++; } catch (e) {}
   }
-  // 5) linked_transfer_id معطوب
   for (const t of DB.bankTxns) {
     if (t.linked_transfer_id && !bankTxnIds.has(t.linked_transfer_id)) {
       try { await sbPatch('bank_transactions', t.id, { linked_transfer_id: null }); fixed++; } catch (e) {}
     }
   }
+
   if (fixed > 0) { console.log('[Integrity] fixed', fixed); await loadAll(); }
   else console.log('[Integrity] all checks passed');
 }
@@ -251,7 +468,7 @@ async function loadAll(opts = {}) {
   const silent = opts.silent === true;
   const useCache = opts.useCache !== false;
 
-  // ─── 1) عرض البيانات من الكاش فوراً (إن وُجد) ───
+  // ─── 1) عرض الكاش فوراً ───
   if (useCache) {
     const cache = await loadCache();
     if (cache) {
@@ -260,13 +477,11 @@ async function loadAll(opts = {}) {
         renderPage();
         updateNotificationBell();
         const t = calcTotals();
-        const sidebarTotal = document.getElementById('sidebar-total');
-        if (sidebarTotal) sidebarTotal.textContent = fmt(t.grand);
-        const syncEl = document.getElementById('sidebar-sync');
-        if (syncEl) syncEl.innerHTML = '<span class="sync-dot"></span> تحديث...';
-      } catch (e) {
-        console.warn('[loadAll] cache render failed:', e.message);
-      }
+        const st = document.getElementById('sidebar-total');
+        if (st) st.textContent = fmt(t.grand);
+        const se = document.getElementById('sidebar-sync');
+        if (se) se.innerHTML = '<span class="sync-dot"></span> تحديث...';
+      } catch (e) { console.warn('[loadAll] cache render failed:', e.message); }
     } else if (!silent) {
       showAllSkeletons();
     }
@@ -274,51 +489,41 @@ async function loadAll(opts = {}) {
     showAllSkeletons();
   }
 
-  // ─── 2) تحميل من الشبكة ───
+  // ─── 2) جلب من الشبكة ───
   try {
     const syncEl = document.getElementById('sidebar-sync');
     if (syncEl && !useCache) syncEl.innerHTML = '<span class="sync-dot"></span> جاري التحميل...';
 
-    const [banks, bankTxns, stockTxns, stockPrices, metalTxns, metalPrices,
-           certs, dividends, recurring, goals, exRates, snapshots, debts, debtPayments,
-           installments, installmentPayments, attachments] =
-      await Promise.all([
-        sbGet('banks', '?order=id&deleted_at=is.null'),
-        sbGet('bank_transactions', '?order=date.desc,id.desc&deleted_at=is.null'),
-        sbGet('stock_transactions', '?order=date.asc,id.asc&deleted_at=is.null'),
-        sbGet('stock_prices', '?order=symbol'),
-        sbGet('metal_transactions', '?order=date.asc,id.asc&deleted_at=is.null'),
-        sbGet('metal_prices', '?order=metal_type'),
-        sbGet('certificates', '?order=issued_date.asc&deleted_at=is.null'),
-        sbGet('dividends', '?order=date.desc&deleted_at=is.null'),
-        sbGet('recurring_transactions', '?order=id&deleted_at=is.null'),
-        sbGet('financial_goals', '?order=id&deleted_at=is.null'),
-        sbGet('exchange_rates', '?order=currency'),
-        sbGet('portfolio_snapshots', '?order=snapshot_date.asc&limit=500'),
-        sbGet('debts', '?order=id&deleted_at=is.null'),
-        sbGet('debt_payments', '?order=date.desc&deleted_at=is.null'),
-        sbGet('installments', '?order=id&deleted_at=is.null'),
-        sbGet('installment_payments', '?order=date.desc&deleted_at=is.null'),
-        sbGet('attachments', '?order=created_at.desc&deleted_at=is.null')
-      ]);
+    const [
+      banks, bankTxns, stockTxns, stockPrices, metalTxns, metalPrices,
+      certs, dividends, recurring, goals, exRates, snapshots, debts, debtPayments,
+      installments, installmentPayments, attachments
+    ] = await Promise.all([
+      sbGet('banks', '?order=id&deleted_at=is.null'),
+      sbGet('bank_transactions', '?order=date.desc,id.desc&deleted_at=is.null'),
+      sbGet('stock_transactions', '?order=date.asc,id.asc&deleted_at=is.null'),
+      sbGet('stock_prices', '?order=symbol'),
+      sbGet('metal_transactions', '?order=date.asc,id.asc&deleted_at=is.null'),
+      sbGet('metal_prices', '?order=metal_type'),
+      sbGet('certificates', '?order=issued_date.asc&deleted_at=is.null'),
+      sbGet('dividends', '?order=date.desc&deleted_at=is.null'),
+      sbGet('recurring_transactions', '?order=id&deleted_at=is.null'),
+      sbGet('financial_goals', '?order=id&deleted_at=is.null'),
+      sbGet('exchange_rates', '?order=currency'),
+      sbGet('portfolio_snapshots', '?order=snapshot_date.asc&limit=500'),
+      sbGet('debts', '?order=id&deleted_at=is.null'),
+      sbGet('debt_payments', '?order=date.desc&deleted_at=is.null'),
+      sbGet('installments', '?order=id&deleted_at=is.null'),
+      sbGet('installment_payments', '?order=date.desc&deleted_at=is.null'),
+      sbGet('attachments', '?order=created_at.desc&deleted_at=is.null').catch(() => [])
+    ]);
 
-    DB.banks = banks;
-    DB.bankTxns = bankTxns;
-    DB.stockTxns = stockTxns;
-    DB.stockPrices = stockPrices;
-    DB.metalTxns = metalTxns;
-    DB.metalPrices = metalPrices;
-    DB.certs = certs;
-    DB.dividends = dividends;
-    DB.recurring = recurring;
-    DB.goals = goals;
-    DB.exchangeRates = exRates;
-    DB.snapshots = snapshots;
-    DB.debts = debts;
-    DB.debtPayments = debtPayments;
-    DB.installments = installments;
-    DB.installmentPayments = installmentPayments;
-    DB.attachments = attachments;
+    Object.assign(DB, {
+      banks, bankTxns, stockTxns, stockPrices, metalTxns, metalPrices,
+      certs, dividends, recurring, goals,
+      exchangeRates: exRates, snapshots, debts, debtPayments,
+      installments, installmentPayments, attachments
+    });
 
     // استبعد الحركات المرتبطة ببنوك محذوفة
     const validBankIds = new Set(banks.map(b => b.id));
@@ -329,7 +534,6 @@ async function loadAll(opts = {}) {
       UI.activeBankId = banks[0].id;
 
     saveCache();
-
     await saveSnapshot();
     updateBadges();
     renderPage();
@@ -337,8 +541,8 @@ async function loadAll(opts = {}) {
     hideAllSkeletons();
 
     const t = calcTotals();
-    const sidebarTotal = document.getElementById('sidebar-total');
-    if (sidebarTotal) sidebarTotal.textContent = fmt(t.grand);
+    const st = document.getElementById('sidebar-total');
+    if (st) st.textContent = fmt(t.grand);
 
     setTimeout(runIntegrityCheck, 3000);
 
@@ -351,11 +555,8 @@ async function loadAll(opts = {}) {
     hideAllSkeletons();
     const msg = e.message || 'خطأ غير معروف';
 
-    if (!isOnline()) {
-      toast('لا يوجد اتصال — التطبيق يعمل من الكاش', false);
-    } else {
-      toast('خطأ في الاتصال: ' + msg, false);
-    }
+    if (!isOnline()) toast('لا يوجد اتصال — التطبيق يعمل من الكاش', false);
+    else toast('خطأ في الاتصال: ' + msg, false);
 
     const syncEl = document.getElementById('sidebar-sync');
     if (syncEl) syncEl.innerHTML = '<span class="sync-dot err"></span> ' + msg.slice(0, 40);
@@ -377,7 +578,7 @@ async function loadAll(opts = {}) {
 // ══════════════════════════════════════════════════════════════════
 async function exportBackup() {
   try {
-    const tables = ['banks','bank_transactions','stock_transactions','stock_prices','metal_transactions','metal_prices','certificates','dividends','recurring_transactions','financial_goals','exchange_rates','portfolio_snapshots','debts','debt_payments'];
+    const tables = ['banks','bank_transactions','stock_transactions','stock_prices','metal_transactions','metal_prices','certificates','dividends','recurring_transactions','financial_goals','exchange_rates','portfolio_snapshots','debts','debt_payments','installments','installment_payments'];
     const data = {};
     for (const t of tables) data[t] = await sbGet(t, '?order=id');
     const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
@@ -395,8 +596,8 @@ async function importBackup(input) {
   try {
     const text = await file.text();
     const data = JSON.parse(text);
-    if (!confirm('سيتم مسح البيانات الحالية. متابعة؟')) return;
-    const order = ['financial_goals','recurring_transactions','dividends','debt_payments','debts','certificates','metal_transactions','stock_transactions','bank_transactions','exchange_rates','stock_prices','metal_prices','portfolio_snapshots','banks'];
+    if (!confirm('سيتم مسح البيانات الحالية واستبدالها. متابعة؟')) return;
+    const order = ['financial_goals','recurring_transactions','dividends','debt_payments','debts','installment_payments','installments','certificates','metal_transactions','stock_transactions','bank_transactions','exchange_rates','stock_prices','metal_prices','portfolio_snapshots','banks'];
     for (const table of order) {
       if (!data[table]) continue;
       const ex = await sbGet(table, '?select=id');
@@ -410,7 +611,7 @@ async function importBackup(input) {
 }
 
 // ══════════════════════════════════════════════════════════════════
-//  Auth success handler — يُستدعى بعد نجاح الدخول
+//  Auth success handler
 // ══════════════════════════════════════════════════════════════════
 async function onAuthSuccess() {
   await loadAppSettings();
@@ -418,55 +619,90 @@ async function onAuthSuccess() {
   updateCurrencyLabels();
   await loadAll();
 
-  // ─── تطبيق العمليات المتكررة المستحقة تلقائياً ───
-  // (يتم مرة واحدة يومياً — يُخزَّن في localStorage)
+  // تطبيق العمليات المتكررة (مرة يومياً)
   setTimeout(async () => {
     try {
       const result = await autoApplyRecurring(false);
       notifyAutoRecurringResult(result);
-    } catch (e) {
-      console.warn('[auto-recurring] error:', e.message);
-    }
-  }, 1500); // بعد تحميل البيانات
+    } catch (e) { console.warn('[auto-recurring]', e.message); }
+  }, 1500);
 
-  // تحديث الأسعار في الخلفية
+  // تحميل Chart.js في الخلفية
+  ensureChartLoaded();
+
+  // جلب الأسعار تلقائياً
   pricesPage.autoFetchExchangeRates(false);
   pricesPage.autoFetchMetalPrices(false);
 }
 
 // ══════════════════════════════════════════════════════════════════
-//  تعريض كل الدوال على window (لتعمل مع onclick في HTML)
+//  OCR Handler — استخراج النص من الصور
+// ══════════════════════════════════════════════════════════════════
+function installOcrHandler() {
+  window.__ocrScan = async (input, modalPrefix) => {
+    const file = input.files?.[0];
+    if (!file) return;
+
+    // تحويل البادئة: wit → ew، dep → ed (أسماء حقول HTML)
+    const prefixMap = { wit: 'ew', dep: 'ed' };
+    const realPrefix = prefixMap[modalPrefix] || modalPrefix;
+
+    const progressEl = document.getElementById(`ocr-progress-${modalPrefix}`);
+    if (progressEl) {
+      progressEl.style.display = 'block';
+      progressEl.textContent = 'جاري تحميل محرك الاستخراج...';
+    }
+
+    try {
+      const text = await extractText(file, pct => {
+        if (progressEl) progressEl.textContent = `جاري التحليل... ${pct.toFixed(0)}%`;
+      });
+
+      const parsed = parseReceipt(text);
+      console.log('[OCR] Extracted:', parsed);
+
+      const amountEl = document.getElementById(`${realPrefix}-amount`);
+      const dateEl = document.getElementById(`${realPrefix}-date`);
+      const notesEl = document.getElementById(`${realPrefix}-notes`);
+
+      let filled = 0;
+      if (parsed.amount && amountEl) { amountEl.value = parsed.amount.toFixed(2); filled++; }
+      if (parsed.date && dateEl) { dateEl.value = parsed.date; filled++; }
+      if (parsed.merchant && notesEl) { notesEl.value = parsed.merchant; filled++; }
+
+      if (progressEl) {
+        if (filled === 0) {
+          progressEl.innerHTML = `<span style="color:var(--gold)">لم يُتعرف على بيانات — املأ الحقول يدوياً</span>`;
+        } else {
+          progressEl.innerHTML = `<span style="color:var(--green)">تم استخراج ${filled} حقل</span>`;
+        }
+        setTimeout(() => { progressEl.style.display = 'none'; }, 5000);
+      }
+
+      if (modalPrefix === 'wit' && typeof window.updateWitPreview === 'function') window.updateWitPreview();
+      if (modalPrefix === 'dep' && typeof window.updateDepPreview === 'function') window.updateDepPreview();
+
+    } catch (e) {
+      console.error('[OCR] failed:', e);
+      if (progressEl) progressEl.innerHTML = `<span style="color:var(--red)">خطأ: ${escapeHtml(e.message)}</span>`;
+    } finally {
+      input.value = '';
+    }
+  };
+}
+
+// ══════════════════════════════════════════════════════════════════
+//  exposeGlobals — تعريض الدوال لـ window
 // ══════════════════════════════════════════════════════════════════
 function exposeGlobals() {
-
-  applyAllRecurringNow: async () => {
-  const result = await autoApplyRecurring(true); // force = true
-  notifyAutoRecurringResult(result);
-  return result;
-},
-
-      // Recurring
-  Object.assign(window, {
-    saveRecurring: recurringPage.saveRecurring,
-    editRecurring: recurringPage.editRecurring,
-    deleteRecurring: recurringPage.deleteRecurring,
-    applyRecurring: recurringPage.applyRecurring,
-    applyAllRecurring: recurringPage.applyAllRecurring,
-    setRecurringFilter: recurringPage.setRecurringFilter,
-    renderAudit: auditPage.renderAudit,
-    applyAllRecurringNow: async () => {                       // ← جديد
-      const result = await autoApplyRecurring(true);
-      notifyAutoRecurringResult(result);
-      return result;
-    }
-  });
   // Core
   Object.assign(window, {
     loadAll, renderPage, nav, toggleSidebar, toast,
     toggleDark, setPeriodFromSelect, applyGlobalCustomRange,
     toggleNotifications, openModal, closeModal,
     initAuthGate, connectSupabase, disconnectSupabase,
-    doLogin, doSignup, doLogout, setAuthTab
+    doLogin, doSignup, doLogout, setAuthTab,
+    openGlobalSearch, closeGlobalSearch
   });
 
   // Banks
@@ -483,7 +719,7 @@ function exposeGlobals() {
     setBankSort, setBankTxnFilter, switchBankTab
   });
 
-  // Modals: previews + quick actions
+  // Modal previews
   Object.assign(window, {
     updateDepPreview, updateWitPreview, updateTransferPreview,
     updateBuyPreview, updateSellPreview,
@@ -493,11 +729,6 @@ function exposeGlobals() {
     onMetalTypeChange
   });
 
-  Object.assign(window, {
-  saveRebalanceTargets: rebalancingPage.saveRebalanceTargets,
-  updateRebalanceSum: rebalancingPage.updateRebalanceSum,
-  renderRebalanceCalculator: rebalancingPage.renderRebalanceCalculator
-});
   // Stocks
   Object.assign(window, {
     doBuy: stocksPage.doBuy,
@@ -545,6 +776,17 @@ function exposeGlobals() {
     openDebtPay: debtsPage.openDebtPay
   });
 
+  // Installments
+  Object.assign(window, {
+    saveInstallment: installmentsPage.saveInstallment,
+    editInstallment: installmentsPage.editInstallment,
+    deleteInstallment: installmentsPage.deleteInstallment,
+    openInstallmentPay: installmentsPage.openInstallmentPay,
+    saveInstallmentPayment: installmentsPage.saveInstallmentPayment,
+    deleteInstallmentPayment: installmentsPage.deleteInstallmentPayment,
+    autoCalcInstallmentAmount: installmentsPage.autoCalcInstallmentAmount
+  });
+
   // Recurring
   Object.assign(window, {
     saveRecurring: recurringPage.saveRecurring,
@@ -552,7 +794,12 @@ function exposeGlobals() {
     deleteRecurring: recurringPage.deleteRecurring,
     applyRecurring: recurringPage.applyRecurring,
     applyAllRecurring: recurringPage.applyAllRecurring,
-    setRecurringFilter: recurringPage.setRecurringFilter
+    setRecurringFilter: recurringPage.setRecurringFilter,
+    applyAllRecurringNow: async () => {
+      const result = await autoApplyRecurring(true);
+      notifyAutoRecurringResult(result);
+      return result;
+    }
   });
 
   // Goals
@@ -576,6 +823,10 @@ function exposeGlobals() {
   // Reports
   Object.assign(window, {
     exportPDF: reportsPage.exportPDF,
+    exportExcel: async () => {
+      const { exportExcel: fn } = await import('./core/excel.js');
+      return fn();
+    },
     updateReportCurrencyCard: reportsPage.updateReportCurrencyCard,
     renderRecent: dashboardPage.renderRecent
   });
@@ -591,166 +842,41 @@ function exposeGlobals() {
     deleteZakatRecord: zakatPage.deleteZakatRecord
   });
 
-  // Settings page
+  // Rebalancing
+  Object.assign(window, {
+    saveRebalanceTargets: rebalancingPage.saveRebalanceTargets,
+    updateRebalanceSum: rebalancingPage.updateRebalanceSum,
+    renderRebalanceCalculator: rebalancingPage.renderRebalanceCalculator
+  });
+
+  // Forecast
+  Object.assign(window, {
+    saveForecastSettings: forecastPage.saveForecastSettings
+  });
+
+  // Comparisons
+  Object.assign(window, {
+    __setCmpTab: comparisonsPage.setCmpTab
+  });
+
+  // Settings
   Object.assign(window, {
     saveGeneralSettings,
     addSettingsCurrency,
     renderSettings,
     exportBackup,
     importBackup,
-    saveEdit
+    saveEdit,
+    clearCache,
+    cacheInfo,
+    saveCache,
+    openCSVImport
   });
 
-  Object.assign(window, {
-  clearCache,
-  cacheInfo,
-  saveCache
-  });
-
-
-  // Installments
-Object.assign(window, {
-  saveInstallment: installmentsPage.saveInstallment,
-  editInstallment: installmentsPage.editInstallment,
-  deleteInstallment: installmentsPage.deleteInstallment,
-  openInstallmentPay: installmentsPage.openInstallmentPay,
-  saveInstallmentPayment: installmentsPage.saveInstallmentPayment,
-  deleteInstallmentPayment: installmentsPage.deleteInstallmentPayment,
-  autoCalcInstallmentAmount: installmentsPage.autoCalcInstallmentAmount
-});
-
-  window.__ocrScan = async (input, modalPrefix) => {
-  const file = input.files?.[0];
-  if (!file) return;
-
-  const progressEl = document.getElementById(`ocr-progress-${modalPrefix}`);
-  if (progressEl) { progressEl.style.display = 'block'; progressEl.textContent = '⏳ جاري تحميل Tesseract...'; }
-
-  try {
-    const text = await extractText(file, pct => {
-      if (progressEl) progressEl.textContent = `⏳ جاري التحليل... ${pct.toFixed(0)}%`;
-    });
-
-    const parsed = parseReceipt(text);
-
-    // امتلئ الحقول
-    if (parsed.amount) {
-      document.getElementById(`${modalPrefix}-amount`).value = parsed.amount.toFixed(2);
-    }
-    if (parsed.date) {
-      document.getElementById(`${modalPrefix}-date`).value = parsed.date;
-    }
-    if (parsed.merchant) {
-      const notesEl = document.getElementById(`${modalPrefix}-notes`);
-      if (notesEl) notesEl.value = parsed.merchant;
-    }
-
-    if (progressEl) {
-      progressEl.innerHTML = `<span style="color:var(--green)">✓ تم الاستخراج (${parsed.amount ? fmt(parsed.amount) : 'بدون مبلغ'})</span>`;
-      setTimeout(() => { progressEl.style.display = 'none'; }, 4000);
-    }
-
-    // حدّث المعاينة
-    if (modalPrefix === 'wit' && typeof window.updateWitPreview === 'function') window.updateWitPreview();
-    if (modalPrefix === 'dep' && typeof window.updateDepPreview === 'function') window.updateDepPreview();
-
-    // أظهر النص الكامل للمراجعة (اختياري)
-    console.log('[OCR] Extracted:', parsed);
-    console.log('[OCR] Raw text:', text);
-  } catch (e) {
-    if (progressEl) progressEl.innerHTML = `<span style="color:var(--red)">✗ ${e.message}</span>`;
-    console.error('[OCR] failed:', e);
-  } finally {
-    input.value = '';
-  }
-};
-  Object.assign(window, {
-  __pushEnable: async () => {
-    try {
-      const sub = await subscribeToPush();
-      toast('تم تفعيل الإشعارات ✓');
-      renderPushStatus();
-    } catch (e) {
-      toast('خطأ: ' + e.message, false);
-      renderPushStatus();
-    }
-  },
-  __pushDisable: async () => {
-    try {
-      await unsubscribeFromPush();
-      toast('تم تعطيل الإشعارات');
-      renderPushStatus();
-    } catch (e) { toast('خطأ: ' + e.message, false); }
-  },
-  __pushTest: async () => {
-    try {
-      await sendTestNotification();
-      toast('تم الإرسال — تحقق من شريط الإشعارات');
-    } catch (e) { toast('خطأ: ' + e.message, false); }
-  }
-});
-
-// دالة تحديث الحالة
-async function renderPushStatus() {
-  const el = document.getElementById('push-status');
-  if (!el) return;
-
-  if (!isPushSupported()) {
-    el.innerHTML = `<div style="padding:10px;background:var(--red-l);color:var(--red-d);border-radius:8px;font-size:12px">⚠️ Push غير مدعوم في هذا المتصفح</div>`;
-    return;
-  }
-
-  if (!isPushConfigured()) {
-    el.innerHTML = `<div style="padding:10px;background:var(--gold-l);color:var(--gold-d);border-radius:8px;font-size:12px">
-      ⚠️ يحتاج الإعداد: يجب إدخال VAPID Public Key في <code>js/core/push.js</code>
-      <div style="margin-top:6px;font-size:11px">راجع الدليل المرفق لتوليد المفتاح</div>
-    </div>`;
-    return;
-  }
-
-  const perm = getPermissionState();
-  const sub = await getCurrentSubscription();
-
-  if (perm === 'denied') {
-    el.innerHTML = `<div style="padding:10px;background:var(--red-l);color:var(--red-d);border-radius:8px;font-size:12px">🚫 الإذن مرفوض — افتح إعدادات المتصفح وأعد التفعيل</div>`;
-    return;
-  }
-
-  if (sub) {
-    el.innerHTML = `<div style="padding:10px;background:var(--green-l);color:var(--green-d);border-radius:8px;font-size:12px;display:flex;justify-content:space-between;align-items:center">
-      <span>✓ الإشعارات مفعّلة على هذا الجهاز</span>
-      <span style="font-size:10.5px;opacity:.7">${escapeHtml(sub.endpoint.slice(0, 40))}...</span>
-    </div>`;
-  } else {
-    el.innerHTML = `<div style="padding:10px;background:var(--surface2);color:var(--muted);border-radius:8px;font-size:12px">لم يتم التفعيل بعد</div>`;
-  }
-}
-
-// استدعِ عند عرض صفحة الإعدادات
-const _origRenderSettings = window.renderSettings;
-// ... (يُستدعى عند renderSettings)
-
-// أضف في renderSettings أو في nav:
-window.renderPage = new Proxy(window.renderPage || (() => {}), {
-  apply(target, thisArg, args) {
-    const result = target.apply(thisArg, args);
-    if (UI.activePage === 'settings') setTimeout(renderPushStatus, 100);
-    return result;
-  }
-});
-  
-  // Settings helpers (تُستدعى من innerHTML بـ window.__)
-  window.__DB__ = DB;   // لفتح المرفقات
-  saveForecastSettings: forecastPage.saveForecastSettings,
-  window.__setCmpTab = comparisonsPage.setCmpTab;
-  window.exportExcel = exportExcel;
-  window.openCSVImport = openCSVImport;
+  // Settings helpers (تُستدعى من innerHTML)
   window.__renameSettingsCurrency = renameSettingsCurrency;
   window.__removeSettingsCurrency = removeSettingsCurrency;
   window.__populateMetalTypeSelect = populateMetalTypeSelect;
-  window.openGlobalSearch = openGlobalSearch;
-  window.closeGlobalSearch = closeGlobalSearch;
-  
 }
 
 // ══════════════════════════════════════════════════════════════════
@@ -758,23 +884,27 @@ window.renderPage = new Proxy(window.renderPage || (() => {}), {
 // ══════════════════════════════════════════════════════════════════
 installToastGlobal();
 initDarkMode();
+installHelpAndSqlHandlers();
+installOcrHandler();
 exposeGlobals();
+installShortcuts();
+installNetworkIndicator();
+setupNetworkToasts();
+installAttachmentHandlers();
+installDetectorHandlers();
+installLoanCalcHandlers();
+installCSVHandlers();
+auditPage.installAuditHandlers();
+taxPage.installTaxHandlers();
+
 setAuthSuccessHandler(onAuthSuccess);
 initAuthGate();
 
-// تسجيل Service Worker (احتياط لو ما اتسجلش من HTML)
+// تسجيل Service Worker
 if ('serviceWorker' in navigator && !navigator.serviceWorker.controller) {
   window.addEventListener('load', () => {
     navigator.serviceWorker.register('sw.js', { scope: './' }).catch(() => {});
   });
 }
-taxPage.installTaxHandlers();
-installAuditHandlers();
-installCSVHandlers();
-installLoanCalcHandlers();
-installNetworkIndicator();
-setupNetworkToasts();
-installAttachmentHandlers();
-installDetectorHandlers();
 
 console.log('[main] Portfolio Pro bootstrapped');
