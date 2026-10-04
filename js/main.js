@@ -442,13 +442,12 @@ function installPushHandlers() {
 //  Snapshots
 // ══════════════════════════════════════════════════════════════════
 async function saveSnapshot() {
-  // احسب القيم دائماً بعملة EGP (نقطة الارتكاز)
+  // ✅ نحفظ دائماً بـ EGP (نقطة الارتكاز الثابتة داخلية)
   const EGP = 'EGP';
+  const rate = (cur) => cur === 'EGP' ? 1 : (DB.exchangeRates.find(x => x.currency === cur)?.rate || 1);
+
   const totalBanksEGP = DB.banks.reduce((a, b) => {
-    const balance = N2(b.balance);
-    const cur = b.currency || 'EGP';
-    const rate = cur === 'EGP' ? 1 : (DB.exchangeRates.find(x => x.currency === cur)?.rate || 1);
-    return a + balance * rate;
+    return a + N2(b.balance) * rate(b.currency || 'EGP');
   }, 0);
 
   const h = getHoldings();
