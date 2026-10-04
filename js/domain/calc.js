@@ -1,10 +1,36 @@
 // ══════════════════════════════════════════════════════════════════
-//  calc.js — كل حسابات المحفظة (نقية، بدون DOM)
+//  calc.js — حسابات المحفظة (pure math)
 // ══════════════════════════════════════════════════════════════════
 import { DB } from '../state.js';
-import { N2, toEGP } from '../core/utils.js';
+import { N2, toEGP, today } from '../core/utils.js';
 
-// ─── أسعار ─────────────────────────────────────────────────────
+// ══════════════════ Helpers مساعدة ══════════════════
+
+/**
+ * هل الشهادة نشطة (غير مُستردّة)؟
+ */
+export function isActiveCert(c) {
+  if (!c) return false;
+  if (c.matured_at) return false;
+  return c.maturity_date > today();
+}
+
+/**
+ * الشهادات النشطة فقط.
+ */
+export function getActiveCerts() {
+  return DB.certs.filter(isActiveCert);
+}
+
+/**
+ * الشهادات المنتهية/المُستردّة.
+ */
+export function getMaturedCerts() {
+  return DB.certs.filter(c => c.matured_at || c.maturity_date <= today());
+}
+
+// ══════════════════ أسعار ══════════════════
+
 export function getStockPrice(sym) {
   const p = DB.stockPrices.find(x => x.symbol === sym);
   return p ? N2(p.current_price) : 0;
@@ -15,7 +41,8 @@ export function getMetalPrice(type) {
   return p ? N2(p.price_per_gram) : 0;
 }
 
-// ─── حيازات الأسهم (بمتوسط تكلفة مرجّح) ────────────────────────
+// ══════════════════ حيازات الأسهم ══════════════════
+
 export function getHoldings(marketFilter) {
   const h = {};
   const txns = (marketFilter && marketFilter !== 'ALL')
@@ -57,7 +84,8 @@ export function getHoldings(marketFilter) {
   return Object.fromEntries(Object.entries(h).filter(([, v]) => v.qty > 0.0001));
 }
 
-// ─── حيازات المعادن (مفتاح مركّب "type|title") ─────────────────
+// ══════════════════ حيازات المعادن ══════════════════
+
 export function getMetalHoldings() {
   const h = {};
   [...DB.metalTxns]
@@ -99,7 +127,8 @@ export function getMetalHoldings() {
   return Object.fromEntries(Object.entries(h).filter(([, v]) => v.weight > 0.0001));
 }
 
-// ─── إجماليات المحفظة ──────────────────────────────────────────
+// ══════════════════ إجماليات المحفظة (الوقت الحالي) ══════════════════
+
 export function calcTotals() {
   const h = getHoldings();
   const mh = getMetalHoldings();
@@ -110,15 +139,18 @@ export function calcTotals() {
     (a, [s, v]) => a + v.qty * (getStockPrice(s) || v.avgPrice), 0);
   const stocksCost = Object.values(h).reduce((a, v) => a + v.totalCost, 0);
 
-  // ملاحظة: استخدام metal_type الحقيقي بدل المفتاح المركّب
   const metalsVal = Object.entries(mh).reduce((a, [k, v]) => {
     const baseType = (v.metal_type || k.split('|')[0]).trim();
     return a + v.weight * (getMetalPrice(baseType) || v.avgPrice);
   }, 0);
   const metalsCost = Object.values(mh).reduce((a, v) => a + v.totalCost, 0);
 
-  const certsTotal = DB.certs.reduce((a, c) => a + N2(c.amount), 0);
-  const certsInterest = DB.certs.reduce((a, c) => a + N2(c.total_interest), 0);
+  // ✅ الشهادات: النشطة فقط
+  const activeCerts = getActiveCerts();
+  const certsTotal = activeCerts.reduce((a, c) => a + N2(c.amount), 0);
+  const certsInterest = activeCerts.reduce((a, c) => a + N2(c.total_interest), 0);
+
+  // ✅ الفوائد المُصرَّفة: من كل الشهادات (تاريخي)
   const certsPaid = DB.certs.reduce((a, c) => a + N2(c.interest_paid), 0);
 
   const divTotal = DB.dividends.reduce((a, d) => a + N2(d.amount), 0);
@@ -142,14 +174,16 @@ export function calcTotals() {
     certsTotal, certsInterest, certsPaid, divTotal,
     debtsOwed, debtsOwing,
     pnlStocks, pnlMetals, totalPnl,
-    grand
+    grand,
+    activeCertsCount: activeCerts.length
   };
 }
 
-// ─── إجماليات فترة محددة (للتقارير) ────────────────────────────
+// ══════════════════ إجماليات فترة محددة ══════════════════
+
 export function calcTotalsForPeriod(pStart, pEnd) {
   const CREDIT = ['إيداع', 'تحويل وارد', 'رصيد افتتاحي', 'عائد شهادة', 'أرباح'];
-  const pe = pEnd || new Date().toISOString().slice(0, 10);
+  const pe = pEnd || today();
 
   // ─── الحيازات في نهاية الفترة ───
   const h = {};
@@ -212,6 +246,13 @@ export function calcTotalsForPeriod(pStart, pEnd) {
   });
   const mhF = Object.fromEntries(Object.entries(mh).filter(([, v]) => v.weight > 0.001));
 
+  // ─── الشهادات: النشطة فقط (استُبعدت المُستردّة) ───
+  const activeCerts = DB.certs.filter(c => {
+    if (c.matured_at) return false;
+    if (c.maturity_date <= pe && c.maturity_date <= today()) return false;
+    return c.issued_date <= pe;
+  });
+
   // ─── الحركات خلال الفترة ───
   const bTxns = DB.bankTxns.filter(t => t.date >= pStart && t.date <= pe);
   const sTxns = DB.stockTxns.filter(t => t.date >= pStart && t.date <= pe);
@@ -229,9 +270,8 @@ export function calcTotalsForPeriod(pStart, pEnd) {
 
   const totalBanks = DB.banks.reduce((a, b) => a + toEGP(N2(b.balance), b.currency), 0);
 
-  const certsInPeriod = DB.certs.filter(c => c.issued_date <= pe);
-  const certsTotal = certsInPeriod.reduce((a, c) => a + N2(c.amount), 0);
-  const certsInterest = certsInPeriod.reduce((a, c) => a + N2(c.total_interest), 0);
+  const certsTotal = activeCerts.reduce((a, c) => a + N2(c.amount), 0);
+  const certsInterest = activeCerts.reduce((a, c) => a + N2(c.total_interest), 0);
   const certsPaid = certPayouts.reduce((a, t) => a + N2(t.amount), 0);
   const divTotal = divs.reduce((a, d) => a + N2(d.amount), 0);
 
@@ -276,7 +316,8 @@ export function calcTotalsForPeriod(pStart, pEnd) {
   };
 }
 
-// ─── فوائد الشهادات ────────────────────────────────────────────
+// ══════════════════ الفوائد المستحقة ══════════════════
+
 export function calcAccruedInterest(cert) {
   const now = new Date();
   const issued = new Date(cert.issued_date);
@@ -300,7 +341,8 @@ export function calcNextPayoutDate(cert) {
   return nextDate <= mat ? nextDate : mat;
 }
 
-// ─── جدول دفعات الشهادة ────────────────────────────────────────
+// ══════════════════ جدول دفعات الشهادة ══════════════════
+
 export function getCertPayoutSchedule(cert) {
   const payout = cert.payout_type || 'سنوي';
   const periodDays = { 'يومي': 1, 'أسبوعي': 7, 'شهري': 30.4375, 'سنوي': 365.25 }[payout] || 365.25;
@@ -336,7 +378,8 @@ export function getCertPayoutSchedule(cert) {
   };
 }
 
-// ─── تواريخ متكررة ─────────────────────────────────────────────
+// ══════════════════ تواريخ متكررة ══════════════════
+
 export function nextRecDate(r) {
   const last = r.last_applied ? new Date(r.last_applied) : new Date(r.start_date);
   const next = new Date(last);
@@ -346,7 +389,8 @@ export function nextRecDate(r) {
   return next.toISOString().slice(0, 10);
 }
 
-// ─── حوليات الزكاة (هجري) ──────────────────────────────────────
+// ══════════════════ حوليات هجرية ══════════════════
+
 const ymdLocal = d => d.getFullYear() + '-'
   + String(d.getMonth() + 1).padStart(2, '0') + '-'
   + String(d.getDate()).padStart(2, '0');
@@ -375,98 +419,4 @@ export function addHijriYear(ds) {
     if (p.y === hp.y + 1 && p.m === hp.m && p.d === hp.d) return c;
   }
   return ymdLocal(new Date(start.getTime() + 354 * 86400000));
-}
-
-// ══════════════════════════════════════════════════════════════════
-//  الأقساط
-// ══════════════════════════════════════════════════════════════════
-
-/**
- * يحسب عدد الأيام حسب التكرار
- */
-function freqDays(freq) {
-  return { monthly: 30.4375, weekly: 7, quarterly: 91.3125, yearly: 365.25 }[freq] || 30.4375;
-}
-
-/**
- * يحسب تاريخ الدفعة القادمة لقسط معين
- * @param {object} inst - صف من جدول installments
- * @param {Array} payments - دفعات هذا القسط
- * @returns {{date: string|null, number: number, isOverdue: boolean, daysLeft: number|null}}
- */
-export function nextInstallmentDue(inst, payments) {
-  const paidCount = payments.filter(p => !p.deleted_at).length;
-  if (paidCount >= inst.installments_count) {
-    return { date: null, number: inst.installments_count, isOverdue: false, daysLeft: null };
-  }
-  const days = freqDays(inst.frequency);
-  const start = new Date(inst.start_date);
-  const nextDate = new Date(start.getTime() + paidCount * days * 86400000);
-  const now = new Date();
-  const daysLeft = Math.ceil((nextDate - now) / 86400000);
-  return {
-    date: nextDate.toISOString().slice(0, 10),
-    number: paidCount + 1,
-    isOverdue: nextDate < now,
-    daysLeft
-  };
-}
-
-/**
- * يحسب تقدم قسط: مدفوع، متبقي، نسبة، الحالة
- */
-export function installmentProgress(inst) {
-  const payments = DB.installmentPayments.filter(p => p.installment_id === inst.id && !p.deleted_at);
-  const paidAmount = payments.reduce((a, p) => a + N2(p.amount), 0);
-  const paidCount = payments.length;
-  const totalAmount = N2(inst.total_amount);
-  const remaining = Math.max(0, totalAmount - paidAmount);
-  const remainingCount = Math.max(0, inst.installments_count - paidCount);
-  const pct = totalAmount > 0 ? Math.min(100, paidAmount / totalAmount * 100) : 0;
-  const completed = paidCount >= inst.installments_count;
-  const next = nextInstallmentDue(inst, payments);
-  return {
-    payments,
-    paidAmount,
-    paidCount,
-    totalAmount,
-    remaining,
-    remainingCount,
-    pct,
-    completed,
-    next
-  };
-}
-
-/**
- * ملخص إجمالي كل الأقساط
- */
-export function installmentsSummary() {
-  let totalAmount = 0;
-  let totalPaid = 0;
-  let totalRemaining = 0;
-  let activeCount = 0;
-  let overdueCount = 0;
-  let nextMonthDue = 0;
-
-  DB.installments.forEach(inst => {
-    const prog = installmentProgress(inst);
-    totalAmount += prog.totalAmount;
-    totalPaid += prog.paidAmount;
-    totalRemaining += prog.remaining;
-    if (!prog.completed) {
-      activeCount++;
-      if (prog.next.isOverdue) overdueCount++;
-      // احسب المستحق خلال 30 يوم
-      if (prog.next.date && prog.next.daysLeft !== null && prog.next.daysLeft >= 0 && prog.next.daysLeft <= 30) {
-        nextMonthDue += N2(inst.installment_amount);
-      }
-    }
-  });
-
-  return {
-    totalAmount, totalPaid, totalRemaining,
-    activeCount, overdueCount, nextMonthDue,
-    totalCount: DB.installments.length
-  };
 }
