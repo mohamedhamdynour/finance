@@ -38,6 +38,10 @@ import { installAuditHandlers } from './ui/pages/audit.js';
 import * as taxPage from './ui/pages/tax.js';
 import { openCSVImport, installCSVHandlers } from './ui/csv-import.js';
 import { extractText, parseReceipt } from './domain/ocr.js';
+import {
+  subscribeToPush, unsubscribeFromPush, getCurrentSubscription,
+  sendTestNotification, isPushSupported, isPushConfigured, getPermissionState
+} from './core/push.js';
 
 // ─── 2) UI Shared ──────────────────────────────────────────────
 import { toast, installToastGlobal } from './ui/toast.js';
@@ -657,6 +661,80 @@ Object.assign(window, {
     input.value = '';
   }
 };
+  Object.assign(window, {
+  __pushEnable: async () => {
+    try {
+      const sub = await subscribeToPush();
+      toast('تم تفعيل الإشعارات ✓');
+      renderPushStatus();
+    } catch (e) {
+      toast('خطأ: ' + e.message, false);
+      renderPushStatus();
+    }
+  },
+  __pushDisable: async () => {
+    try {
+      await unsubscribeFromPush();
+      toast('تم تعطيل الإشعارات');
+      renderPushStatus();
+    } catch (e) { toast('خطأ: ' + e.message, false); }
+  },
+  __pushTest: async () => {
+    try {
+      await sendTestNotification();
+      toast('تم الإرسال — تحقق من شريط الإشعارات');
+    } catch (e) { toast('خطأ: ' + e.message, false); }
+  }
+});
+
+// دالة تحديث الحالة
+async function renderPushStatus() {
+  const el = document.getElementById('push-status');
+  if (!el) return;
+
+  if (!isPushSupported()) {
+    el.innerHTML = `<div style="padding:10px;background:var(--red-l);color:var(--red-d);border-radius:8px;font-size:12px">⚠️ Push غير مدعوم في هذا المتصفح</div>`;
+    return;
+  }
+
+  if (!isPushConfigured()) {
+    el.innerHTML = `<div style="padding:10px;background:var(--gold-l);color:var(--gold-d);border-radius:8px;font-size:12px">
+      ⚠️ يحتاج الإعداد: يجب إدخال VAPID Public Key في <code>js/core/push.js</code>
+      <div style="margin-top:6px;font-size:11px">راجع الدليل المرفق لتوليد المفتاح</div>
+    </div>`;
+    return;
+  }
+
+  const perm = getPermissionState();
+  const sub = await getCurrentSubscription();
+
+  if (perm === 'denied') {
+    el.innerHTML = `<div style="padding:10px;background:var(--red-l);color:var(--red-d);border-radius:8px;font-size:12px">🚫 الإذن مرفوض — افتح إعدادات المتصفح وأعد التفعيل</div>`;
+    return;
+  }
+
+  if (sub) {
+    el.innerHTML = `<div style="padding:10px;background:var(--green-l);color:var(--green-d);border-radius:8px;font-size:12px;display:flex;justify-content:space-between;align-items:center">
+      <span>✓ الإشعارات مفعّلة على هذا الجهاز</span>
+      <span style="font-size:10.5px;opacity:.7">${escapeHtml(sub.endpoint.slice(0, 40))}...</span>
+    </div>`;
+  } else {
+    el.innerHTML = `<div style="padding:10px;background:var(--surface2);color:var(--muted);border-radius:8px;font-size:12px">لم يتم التفعيل بعد</div>`;
+  }
+}
+
+// استدعِ عند عرض صفحة الإعدادات
+const _origRenderSettings = window.renderSettings;
+// ... (يُستدعى عند renderSettings)
+
+// أضف في renderSettings أو في nav:
+window.renderPage = new Proxy(window.renderPage || (() => {}), {
+  apply(target, thisArg, args) {
+    const result = target.apply(thisArg, args);
+    if (UI.activePage === 'settings') setTimeout(renderPushStatus, 100);
+    return result;
+  }
+});
   
   // Settings helpers (تُستدعى من innerHTML بـ window.__)
   window.__DB__ = DB;   // لفتح المرفقات
