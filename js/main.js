@@ -195,8 +195,8 @@ function renderPage() {
   // عرض اسم المستخدم الحالي
   const uEl = document.getElementById('st-current-user');
   if (uEl) {
-    uEl.textContent = authSession?.user?.user_metadata?.username
-      || authSession?.user?.email
+    uEl.textContent = conn.authSession?.user?.user_metadata?.username
+      || conn.authSession?.user?.email
       || 'غير معروف';
   }
   setTimeout(renderPushStatus, 100);
