@@ -969,6 +969,20 @@ function exposeGlobals() {
     openCSVImport
   });
 
+    // ✅ للتشخيص من Console
+  window.__DEBUG__ = {
+    DB,
+    UI,
+    APP_SETTINGS,
+    conn,
+    baseCur,
+    fmt,
+    fmtN,
+    calcTotals: () => import('./domain/calc.js').then(m => m.calcTotals()),
+    toEGP,
+    fromEGP,
+    getRate
+  };
   // Settings helpers
   window.__renameSettingsCurrency = renameSettingsCurrency;
   window.__removeSettingsCurrency = removeSettingsCurrency;
