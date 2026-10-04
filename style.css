@@ -859,3 +859,201 @@ body.offline::before {
   0%   { background-position: 0% 0; }
   100% { background-position: 200% 0; }
 }
+
+/* ══════════════════════════════════════════════ */
+/*  PRINT STYLES — تحسين الطباعة                  */
+/* ══════════════════════════════════════════════ */
+@media print {
+  /* اخفِ كل ما هو تفاعلي */
+  .sidebar-wrap,
+  .sidebar,
+  .collapse-btn,
+  .topbar,
+  .topbar-actions,
+  .notif-btn,
+  .dark-btn,
+  .btn,
+  .btn-icon,
+  .tab-bar,
+  .filter-bar,
+  .period-bar,
+  .period-btn,
+  .overlay,
+  .toast,
+  .modal,
+  .notif-panel,
+  #global-period-select,
+  #global-custom-range,
+  #notif-bell,
+  #notif-panel,
+  #sidebar-total,
+  #sidebar-sync,
+  .nav-item,
+  .bank-cards-grid,
+  .cards-grid,
+  .heatmap-container,
+  .chart-box,
+  [id$="-bar"],
+  [id$="-line"],
+  [id$="-pie"],
+  [id$="-pnl"],
+  [id$="-stacked"],
+  [id$="-hchart"],
+  .skel-overlay,
+  .empty-state button {
+    display: none !important;
+  }
+
+  /* الصفحة الرئيسية */
+  html, body {
+    background: #fff !important;
+    color: #111 !important;
+    font-size: 11px !important;
+  }
+
+  .app {
+    display: block !important;
+    height: auto !important;
+    overflow: visible !important;
+  }
+
+  .main {
+    display: block !important;
+    overflow: visible !important;
+    height: auto !important;
+    background: #fff !important;
+  }
+
+  .content {
+    padding: 0 !important;
+    overflow: visible !important;
+    height: auto !important;
+    background: #fff !important;
+  }
+
+  /* الصفحات */
+  .page {
+    display: none !important;
+    page-break-after: always;
+    animation: none !important;
+  }
+
+  .page.active {
+    display: block !important;
+  }
+
+  /* البطاقات — بدون ظلال */
+  .card {
+    box-shadow: none !important;
+    border: 1px solid #d1d5db !important;
+    page-break-inside: avoid;
+    background: #fff !important;
+    margin-bottom: 12px !important;
+  }
+
+  .card-header {
+    background: #f3f4f6 !important;
+    border-bottom: 1px solid #d1d5db !important;
+    padding: 8px 12px !important;
+  }
+
+  .card-body { padding: 10px 12px !important; }
+
+  /* KPIs — اطبعها كجدول مصغر */
+  .kpi-grid {
+    display: grid !important;
+    grid-template-columns: repeat(4, 1fr) !important;
+    gap: 8px !important;
+    margin-bottom: 12px !important;
+  }
+
+  .kpi {
+    box-shadow: none !important;
+    border: 1px solid #e5e7eb !important;
+    padding: 8px !important;
+    background: #fff !important;
+    page-break-inside: avoid;
+  }
+
+  .kpi-value { font-size: 14px !important; }
+  .kpi-label { font-size: 9px !important; }
+  .kpi-sub   { font-size: 9px !important; }
+  .kpi::before { display: none !important; }
+  .kpi-accent { display: none !important; }
+
+  /* الجداول */
+  .table-wrap { overflow: visible !important; }
+  table {
+    font-size: 10px !important;
+    border-collapse: collapse !important;
+    page-break-inside: auto;
+  }
+
+  thead { position: static !important; }
+  th {
+    background: #f3f4f6 !important;
+    border: 1px solid #d1d5db !important;
+    padding: 4px 6px !important;
+    color: #111 !important;
+  }
+
+  td {
+    border: 1px solid #e5e7eb !important;
+    padding: 3px 6px !important;
+    color: #111 !important;
+    page-break-inside: avoid;
+  }
+
+  tr { page-break-inside: avoid; }
+
+  .td-num { color: #111 !important; }
+  .pos    { color: #15803d !important; }
+  .neg    { color: #b91c1c !important; }
+
+  /* روابط الطباعة */
+  a { color: #1a56db !important; text-decoration: underline !important; }
+  a[href]::after { content: " (" attr(href) ")"; font-size: 9px; color: #6b7280; }
+
+  /* الألوان الاحتياطية للطوابع */
+  .badge, .tag {
+    border: 1px solid #d1d5db !important;
+    background: #f9fafb !important;
+    color: #374151 !important;
+    padding: 1px 5px !important;
+  }
+
+  /* خط الرأس على كل صفحة مطبوعة */
+  @page {
+    size: A4;
+    margin: 15mm 12mm;
+    @top-right {
+      content: "محفظتي — " attr(data-print-title);
+      font-size: 9pt;
+      color: #6b7280;
+    }
+    @bottom-center {
+      content: "صفحة " counter(page) " من " counter(pages);
+      font-size: 9pt;
+      color: #6b7280;
+    }
+  }
+
+  /* إخفاء الرسوم البيانية */
+  canvas { display: none !important; }
+
+  /* الحفاظ على تخطيط 2-column */
+  .grid-2 { grid-template-columns: 1fr 1fr !important; gap: 10px !important; }
+  .grid-3 { grid-template-columns: 1fr 1fr 1fr !important; }
+
+  /* Footer للصفحة */
+  body::after {
+    content: "تم إنشاء هذا التقرير آليًا — " attr(data-print-date);
+    display: block;
+    margin-top: 20px;
+    padding-top: 8px;
+    border-top: 1px solid #d1d5db;
+    font-size: 9px;
+    color: #6b7280;
+    text-align: center;
+  }
+}
