@@ -35,6 +35,7 @@ import { installDetectorHandlers } from './ui/recurring-detector.js';
 import { installLoanCalcHandlers, renderLoanCalcPage } from './ui/loan-calc.js';
 import * as auditPage from './ui/pages/audit.js';
 import { installAuditHandlers } from './ui/pages/audit.js';
+import * as taxPage from './ui/pages/tax.js';
 
 // ─── 2) UI Shared ──────────────────────────────────────────────
 import { toast, installToastGlobal } from './ui/toast.js';
@@ -137,6 +138,7 @@ const PAGE_TITLES = {
   forecast: ['التوقعات المالية', 'تنبؤ بمستقبل محفظتك'],
   comparisons: ['المقارنات الزمنية', 'تحليل MoM / QoQ / YoY'],
   audit: ['سجل التغييرات', 'كل التعديلات على قاعدة البيانات'],
+  tax: ['الضرائب', 'ضريبة أرباح رأس المال والتوزيعات'],
 
 };
 
@@ -170,6 +172,7 @@ function renderPage() {
     else if (p === 'reports') reportsPage.renderReports();
     else if (p === 'risk') riskPage.renderRisk();
     else if (p === 'audit') auditPage.renderAudit();
+    else if (p === 'tax') taxPage.renderTax();
     else if (p === 'zakat') zakatPage.renderZakat();
     else if (p === 'forecast') forecastPage.renderForecast();
     else if (p === 'settings') renderSettings();
@@ -636,6 +639,7 @@ if ('serviceWorker' in navigator && !navigator.serviceWorker.controller) {
     navigator.serviceWorker.register('sw.js', { scope: './' }).catch(() => {});
   });
 }
+taxPage.installTaxHandlers();
 installAuditHandlers();
 installLoanCalcHandlers();
 installNetworkIndicator();
