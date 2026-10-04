@@ -1,17 +1,26 @@
 // ══════════════════════════════════════════════════════════════════
 //  pages/dashboard.js — لوحة التحكم
+//  ⚠️ Snapshots تُقرأ بـ EGP وتُحوَّل للعملة الحالية عند العرض
 // ══════════════════════════════════════════════════════════════════
 import { DB, UI } from '../../state.js';
-import { N2, fmt, fmtN, pct, periodStart, sign, cls, escapeHtml, MARKET_NAMES, getBankColor } from '../../core/utils.js';
+import {
+  N2, fmt, fmtN, pct, periodStart, sign, cls, escapeHtml,
+  MARKET_NAMES, getBankColor, baseCur, fromEGP
+} from '../../core/utils.js';
 import { toast } from '../toast.js';
 import { kpi, svgIcon, typeTag, getCertAlerts } from '../shared.js';
-import { mkPie, mkLine, mkBar, destroyChart } from '../charts.js';
+import { mkPie, mkLine, destroyChart } from '../charts.js';
 import { calcTotals, getStockPrice, getMetalPrice } from '../../domain/calc.js';
+
+// ✅ تحويل قيمة snapshot (المحفوظة بـ EGP) إلى العملة الأساسية الحالية
+const displaySnapValue = (egpValue) => fromEGP(N2(egpValue), baseCur());
 
 export function renderDashboard() {
   const T = calcTotals();
-  const { grand, totalBanks, stocksVal, stocksCost, metalsVal, metalsCost,
-          certsTotal, certsPaid, divTotal, pnlStocks, pnlMetals, totalPnl, debtsOwed } = T;
+  const {
+    grand, totalBanks, stocksVal, stocksCost, metalsVal, metalsCost,
+    certsTotal, certsPaid, divTotal, pnlStocks, pnlMetals, totalPnl, debtsOwed
+  } = T;
   const invested = stocksCost + metalsCost + certsTotal;
   const roi = invested > 0 ? totalPnl / invested * 100 : 0;
   const retS = stocksCost > 0 ? pnlStocks / stocksCost * 100 : 0;
@@ -30,25 +39,31 @@ export function renderDashboard() {
   const { soon, expired } = getCertAlerts();
   let alertsHtml = '';
   if (expired.length) {
-    alertsHtml += `<div class="alert alert-danger">
-      <div class="alert-icon"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg></div>
-      <div class="alert-content"><div class="alert-title">شهادات منتهية (${expired.length})</div>
-        <div class="alert-body">${expired.map(c => escapeHtml(c.name) + ' — ' + Math.abs(c.daysLeft) + ' يوم').join(' · ')}</div></div>
+    alertsHtml += `<div class="alert alert-warn">
+      <div class="alert-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg></div>
+      <div class="alert-content">
+        <div class="alert-title">شهادات بحاجة للاسترداد (${expired.length})</div>
+        <div class="alert-body">${expired.map(c => escapeHtml(c.name) + ' — منذ ' + Math.abs(c.daysLeft) + ' يوم').join(' · ')}</div>
+      </div>
     </div>`;
   }
   if (soon.length) {
-    alertsHtml += `<div class="alert alert-warn">
-      <div class="alert-icon"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg></div>
-      <div class="alert-content"><div class="alert-title">شهادات تستحق خلال 30 يوم (${soon.length})</div>
-        <div class="alert-body">${soon.map(c => escapeHtml(c.name) + ' — ' + c.daysLeft + ' يوم').join(' · ')}</div></div>
+    alertsHtml += `<div class="alert alert-info">
+      <div class="alert-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg></div>
+      <div class="alert-content">
+        <div class="alert-title">شهادات تستحق خلال 30 يوم (${soon.length})</div>
+        <div class="alert-body">${soon.map(c => escapeHtml(c.name) + ' — ' + c.daysLeft + ' يوم').join(' · ')}</div>
+      </div>
     </div>`;
   }
   const lowBal = DB.banks.filter(b => N2(b.min_balance) > 0 && N2(b.balance) < N2(b.min_balance));
   if (lowBal.length) {
     alertsHtml += `<div class="alert alert-warn">
-      <div class="alert-icon"><svg viewBox="0 0 24 24"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg></div>
-      <div class="alert-content"><div class="alert-title">حسابات تحت الحد الأدنى (${lowBal.length})</div>
-        <div class="alert-body">${lowBal.map(b => escapeHtml(b.name) + ': ' + fmtN(b.balance) + ' ' + escapeHtml(b.currency || 'EGP')).join(' · ')}</div></div>
+      <div class="alert-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg></div>
+      <div class="alert-content">
+        <div class="alert-title">حسابات تحت الحد الأدنى (${lowBal.length})</div>
+        <div class="alert-body">${lowBal.map(b => escapeHtml(b.name) + ': ' + fmtN(b.balance) + ' ' + escapeHtml(b.currency || 'EGP')).join(' · ')}</div>
+      </div>
     </div>`;
   }
   document.getElementById('dash-alerts').innerHTML = alertsHtml;
@@ -57,7 +72,7 @@ export function renderDashboard() {
   renderDashCharts(T);
   renderDashMovers(T);
 
-  // ─── الأهداف على لوحة التحكم ───
+  // ─── الأهداف ───
   if (DB.goals.length) {
     let gh = '<div class="card"><div class="card-header"><div class="card-title">الأهداف المالية</div></div><div class="card-body">';
     DB.goals.forEach(g => {
@@ -161,6 +176,7 @@ export function renderDashCharts(T) {
 
   setTimeout(() => {
     mkPie('dash-pie', pieData.map(d => d.l), pieData.map(d => d.v), pieData.map(d => d.c));
+
     const snaps = DB.snapshots.filter(s => {
       const s1 = periodStart(UI.globalPeriod || '1y');
       return s.snapshot_date >= s1;
@@ -170,14 +186,15 @@ export function renderDashCharts(T) {
         const d = new Date(s.snapshot_date);
         return d.toLocaleDateString('ar-EG', { month: 'short', day: 'numeric' });
       });
+      // ✅ تحويل كل القيم من EGP إلى العملة الأساسية الحالية
       mkLine('dash-line', labels, [
-        { label: 'إجمالي المحفظة', data: snaps.map(s => N2(s.grand_total)), borderColor: '#1a56db', backgroundColor: 'rgba(26,86,219,0.08)', fill: true, tension: .4, pointRadius: snaps.length < 30 ? 2 : 0, borderWidth: 2 }
+        { label: 'إجمالي المحفظة', data: snaps.map(s => displaySnapValue(s.grand_total)), borderColor: '#1a56db', backgroundColor: 'rgba(26,86,219,0.08)', fill: true, tension: .4, pointRadius: snaps.length < 30 ? 2 : 0, borderWidth: 2 }
       ]);
       mkLine('dash-stacked', labels, [
-        { label: 'بنوك', data: snaps.map(s => N2(s.total_banks)), borderColor: '#1a56db', backgroundColor: 'rgba(26,86,219,0.15)', fill: true, tension: .4, pointRadius: 0 },
-        { label: 'أسهم', data: snaps.map(s => N2(s.total_stocks)), borderColor: '#0d9488', backgroundColor: 'rgba(13,148,136,0.15)', fill: true, tension: .4, pointRadius: 0 },
-        { label: 'معادن', data: snaps.map(s => N2(s.total_metals)), borderColor: '#d97706', backgroundColor: 'rgba(217,119,6,0.15)', fill: true, tension: .4, pointRadius: 0 },
-        { label: 'شهادات', data: snaps.map(s => N2(s.total_certs)), borderColor: '#7c3aed', backgroundColor: 'rgba(124,58,237,0.15)', fill: true, tension: .4, pointRadius: 0 }
+        { label: 'بنوك', data: snaps.map(s => displaySnapValue(s.total_banks)), borderColor: '#1a56db', backgroundColor: 'rgba(26,86,219,0.15)', fill: true, tension: .4, pointRadius: 0 },
+        { label: 'أسهم', data: snaps.map(s => displaySnapValue(s.total_stocks)), borderColor: '#0d9488', backgroundColor: 'rgba(13,148,136,0.15)', fill: true, tension: .4, pointRadius: 0 },
+        { label: 'معادن', data: snaps.map(s => displaySnapValue(s.total_metals)), borderColor: '#d97706', backgroundColor: 'rgba(217,119,6,0.15)', fill: true, tension: .4, pointRadius: 0 },
+        { label: 'شهادات', data: snaps.map(s => displaySnapValue(s.total_certs)), borderColor: '#7c3aed', backgroundColor: 'rgba(124,58,237,0.15)', fill: true, tension: .4, pointRadius: 0 }
       ]);
     }
   }, 50);
