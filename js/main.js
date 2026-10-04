@@ -48,7 +48,7 @@ import { installLoanCalcHandlers } from './ui/loan-calc.js';
 import { openCSVImport, installCSVHandlers } from './ui/csv-import.js';
 
 // ─── 3) Domain ──────────────────────────────────────────────────
-import { calcTotals, nextRecDate } from './domain/calc.js';
+import { calcTotals, nextRecDate, getHoldings, getMetalHoldings, getStockPrice, getMetalPrice } from './domain/calc.js';
 import { autoApplyRecurring, notifyAutoRecurringResult } from './domain/auto-recurring.js';
 import { processMaturedCerts, detectMaturedCerts } from './domain/cert-maturation.js';
 import { extractText, parseReceipt } from './domain/ocr.js';
