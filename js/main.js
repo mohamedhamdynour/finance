@@ -33,6 +33,9 @@ import { autoApplyRecurring, notifyAutoRecurringResult } from './domain/auto-rec
 import * as comparisonsPage from './ui/pages/comparisons.js';
 import { installDetectorHandlers } from './ui/recurring-detector.js';
 import { installLoanCalcHandlers, renderLoanCalcPage } from './ui/loan-calc.js';
+import * as auditPage from './ui/pages/audit.js';
+import { installAuditHandlers } from './ui/pages/audit.js';
+
 // ─── 2) UI Shared ──────────────────────────────────────────────
 import { toast, installToastGlobal } from './ui/toast.js';
 import { destroyChart } from './ui/charts.js';
@@ -133,6 +136,7 @@ const PAGE_TITLES = {
   risk: ['تحليل المخاطر', 'قياس كمي لمخاطر محفظتك'],
   forecast: ['التوقعات المالية', 'تنبؤ بمستقبل محفظتك'],
   comparisons: ['المقارنات الزمنية', 'تحليل MoM / QoQ / YoY'],
+  audit: ['سجل التغييرات', 'كل التعديلات على قاعدة البيانات'],
 
 };
 
@@ -165,6 +169,7 @@ function renderPage() {
     else if (p === 'prices') pricesPage.renderPrices();
     else if (p === 'reports') reportsPage.renderReports();
     else if (p === 'risk') riskPage.renderRisk();
+    else if (p === 'audit') auditPage.renderAudit();
     else if (p === 'zakat') zakatPage.renderZakat();
     else if (p === 'forecast') forecastPage.renderForecast();
     else if (p === 'settings') renderSettings();
@@ -436,6 +441,7 @@ function exposeGlobals() {
     applyRecurring: recurringPage.applyRecurring,
     applyAllRecurring: recurringPage.applyAllRecurring,
     setRecurringFilter: recurringPage.setRecurringFilter,
+    renderAudit: auditPage.renderAudit,
     applyAllRecurringNow: async () => {                       // ← جديد
       const result = await autoApplyRecurring(true);
       notifyAutoRecurringResult(result);
@@ -630,6 +636,7 @@ if ('serviceWorker' in navigator && !navigator.serviceWorker.controller) {
     navigator.serviceWorker.register('sw.js', { scope: './' }).catch(() => {});
   });
 }
+installAuditHandlers();
 installLoanCalcHandlers();
 installNetworkIndicator();
 setupNetworkToasts();
