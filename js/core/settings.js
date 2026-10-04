@@ -36,6 +36,21 @@ export async function loadAppSettings() {
       if (rows[0].value.zakat) {
         APP_SETTINGS.zakat = { ...APP_SETTINGS.zakat, ...rows[0].value.zakat };
       }
+      if (rows[0].value.rebalancing) {
+        APP_SETTINGS.rebalancing = { ...APP_SETTINGS.rebalancing, ...rows[0].value.rebalancing };
+      }
+      if (rows[0].value.forecast) {
+        APP_SETTINGS.forecast = { ...APP_SETTINGS.forecast, ...rows[0].value.forecast };
+      }
+      if (rows[0].value.tax) {
+        APP_SETTINGS.tax = { ...APP_SETTINGS.tax, ...rows[0].value.tax };
+      }
+      if (rows[0].value.comparisons) {
+        APP_SETTINGS.comparisons = { ...APP_SETTINGS.comparisons, ...rows[0].value.comparisons };
+      }
+      if (rows[0].value.telegram) {
+        APP_SETTINGS.telegram = { ...(APP_SETTINGS.telegram || {}), ...rows[0].value.telegram };
+      }
       conn.settingsBackend = 'supabase';
     } else {
       await sbPost('app_settings', [{ value: APP_SETTINGS }]);
@@ -44,7 +59,7 @@ export async function loadAppSettings() {
     normalizeCurrencies();
     return;
   } catch (e) {
-    // الجدول غير موجود → fallback
+    // الجدول غير موجود → fallback إلى localStorage
   }
 
   conn.settingsBackend = 'local';
@@ -54,6 +69,7 @@ export async function loadAppSettings() {
       const parsed = JSON.parse(raw);
       Object.assign(APP_SETTINGS, parsed);
       if (parsed.zakat) APP_SETTINGS.zakat = { ...APP_SETTINGS.zakat, ...parsed.zakat };
+      if (parsed.telegram) APP_SETTINGS.telegram = { ...(APP_SETTINGS.telegram || {}), ...parsed.telegram };
     }
   } catch (e) {}
   normalizeCurrencies();
@@ -160,6 +176,7 @@ export async function saveGeneralSettings() {
   }
 }
 
+// ─── حفظ مفتاح GoldAPI.io ──────────────────────────────────────
 export function saveGoldApiKey() {
   const key = document.getElementById('st-goldapi-key').value.trim();
   APP_SETTINGS.goldapi_key = key;
@@ -201,10 +218,14 @@ export function onMetalTypeChange() {
   document.dispatchEvent(new CustomEvent('metalTypeChange'));
 }
 
-// ─── عرض صفحة الإعدادات ────────────────────────────────────────
+// ══════════════════════════════════════════════════════════════════
+//  renderSettings — عرض صفحة الإعدادات
+// ══════════════════════════════════════════════════════════════════
 export function renderSettings() {
+  // ── 1) البيانات العامة ──
   const nameEl = document.getElementById('st-exchange-name');
   if (nameEl) nameEl.value = APP_SETTINGS.exchange_name || '';
+
   const goldKeyEl = document.getElementById('st-goldapi-key');
   if (goldKeyEl) goldKeyEl.value = APP_SETTINGS.goldapi_key || '';
 
@@ -216,6 +237,7 @@ export function renderSettings() {
     baseSel.value = baseCur();
   }
 
+  // ── 2) قائمة العملات ──
   const listEl = document.getElementById('st-currencies-list');
   if (listEl) {
     listEl.innerHTML = APP_SETTINGS.currencies.map(c =>
@@ -226,6 +248,7 @@ export function renderSettings() {
     ).join('');
   }
 
+  // ── 3) حالة التخزين ──
   const modeEl = document.getElementById('st-storage-mode');
   if (modeEl) {
     modeEl.innerHTML = conn.settingsBackend === 'supabase'
@@ -233,27 +256,42 @@ export function renderSettings() {
       : '<span style="color:var(--gold)">⚠ الإعدادات محفوظة على هذا الجهاز فقط.</span>';
   }
 
-  // ابحث عن modeEl ثم أضف بعدها:
-const cacheInfoEl = document.getElementById('st-cache-info');
-if (cacheInfoEl && typeof window.cacheInfo === 'function') {
-  window.cacheInfo().then(info => {
-    if (!info) {
-      cacheInfoEl.innerHTML = '<span style="color:var(--muted)">لا يوجد كاش محفوظ بعد.</span>';
-      return;
-    }
-    const ageMin = info.age.toFixed(1);
-    const sizeKB = (info.size / 1024).toFixed(1);
-    cacheInfoEl.innerHTML = `
-      <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;font-size:12px">
-        <span style="color:var(--muted)">عمر الكاش: <strong>${ageMin} دقيقة</strong> • الحجم: <strong>${sizeKB} KB</strong></span>
-        <button onclick="window.clearCache().then(()=>location.reload())" style="background:var(--red-l);color:var(--red-d);border:none;padding:5px 12px;border-radius:6px;cursor:pointer;font-size:11px;font-family:inherit;font-weight:700">مسح</button>
-      </div>`;
-  });
-}
+  // ── 4) حالة الكاش ──
+  const cacheInfoEl = document.getElementById('st-cache-info');
+  if (cacheInfoEl && typeof window.cacheInfo === 'function') {
+    window.cacheInfo().then(info => {
+      if (!info) {
+        cacheInfoEl.innerHTML = '<span style="color:var(--muted)">لا يوجد كاش محفوظ بعد.</span>';
+        return;
+      }
+      const ageMin = info.age.toFixed(1);
+      const sizeKB = (info.size / 1024).toFixed(1);
+      cacheInfoEl.innerHTML = `
+        <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;font-size:12px">
+          <span style="color:var(--muted)">عمر الكاش: <strong>${ageMin} دقيقة</strong> • الحجم: <strong>${sizeKB} KB</strong></span>
+          <button onclick="window.clearCache().then(()=>location.reload())" style="background:var(--red-l);color:var(--red-d);border:none;padding:5px 12px;border-radius:6px;cursor:pointer;font-size:11px;font-family:inherit;font-weight:700">مسح</button>
+        </div>`;
+    });
+  }
+
+  // ── 5) كارت Telegram ──
+  const tgSection = document.getElementById('st-telegram-section');
+  if (tgSection) {
+    import('../ui/telegram-setup.js')
+      .then(m => { tgSection.innerHTML = m.renderTelegramCard(); })
+      .catch(e => {
+        console.warn('[telegram] render failed:', e.message);
+        tgSection.innerHTML = '';
+      });
+  }
+
+  // ── 6) تنبيهات قاعدة البيانات ──
   renderSchemaAlert();
 }
 
-// ─── تنبيه أعمدة ناقصة ──────────────────────────────────────────
+// ══════════════════════════════════════════════════════════════════
+//  renderSchemaAlert — تنبيه الأعمدة الناقصة
+// ══════════════════════════════════════════════════════════════════
 const COLUMN_TYPE_HINTS = { currency: 'text', market: 'text', price_currency: 'text' };
 
 export function renderSchemaAlert() {
