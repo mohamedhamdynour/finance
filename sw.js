@@ -43,6 +43,9 @@ const STATIC_ASSETS = [
 './js/domain/recurring-detector.js',
 './js/ui/pages/comparisons.js',
 './js/ui/recurring-detector.js',
+  './js/domain/loan.js',
+'./js/ui/loan-calc.js',
+'./js/ui/pages/audit.js',
 ];
 
 // ─── Install: pre-cache app shell ────────────────────────────────
