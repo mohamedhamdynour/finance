@@ -976,6 +976,28 @@
   <div class="form-row"><div class="form-group"><label class="form-label">الوصف *</label><input class="form-control" id="edebt-name" placeholder="قرض سيارة..."></div><div class="form-group"><label class="form-label">الطرف الآخر</label><input class="form-control" id="edebt-party" placeholder="البنك..."></div></div>
   <div class="form-row"><div class="form-group"><label class="form-label">النوع</label><select class="form-control" id="edebt-type"><option>دين علي</option><option>دين لي</option></select></div><div class="form-group"><label class="form-label">فائدة % سنوي</label><input class="form-control" type="number" step="0.01" id="edebt-rate" value="0"></div></div>
   <div class="form-row"><div class="form-group"><label class="form-label">المبلغ الأصلي *</label><input class="form-control" type="number" id="edebt-amount"></div><div class="form-group"><label class="form-label">المتبقي *</label><input class="form-control" type="number" id="edebt-remaining"></div></div>
+    <!-- آلة حاسبة القرض -->
+  <div class="form-divider"></div>
+  <div style="background:var(--surface2);border-radius:10px;padding:12px;margin-bottom:12px">
+    <div style="font-size:11.5px;font-weight:800;color:var(--muted);margin-bottom:8px;text-transform:uppercase;letter-spacing:.5px">
+      🧮 حاسبة القرض (اختياري)
+    </div>
+    <div class="form-row-3">
+      <div class="form-group" style="margin-bottom:6px">
+        <label class="form-label" style="font-size:9.5px">المدة (شهور)</label>
+        <input class="form-control" type="number" id="loan-months" value="36" min="1" max="360" oninput="window.__updateLoanCalc()">
+      </div>
+      <div class="form-group" style="margin-bottom:6px">
+        <label class="form-label" style="font-size:9.5px">الفائدة % سنوي</label>
+        <input class="form-control" type="number" step="0.01" id="loan-rate" value="18" oninput="window.__updateLoanCalc()">
+      </div>
+      <div class="form-group" style="margin-bottom:6px">
+        <label class="form-label" style="font-size:9.5px">&nbsp;</label>
+        <button type="button" class="btn btn-outline btn-sm" onclick="window.__applyLoanCalc()" style="width:100%">تعبئة</button>
+      </div>
+    </div>
+    <div id="loan-result" style="font-size:12px"></div>
+  </div>
   <div class="form-row"><div class="form-group"><label class="form-label">تاريخ البداية</label><input class="form-control" type="date" id="edebt-start"></div><div class="form-group"><label class="form-label">تاريخ الاستحقاق</label><input class="form-control" type="date" id="edebt-due"></div></div>
   <div class="form-group"><label class="form-label">الحساب البنكي المرتبط</label><select class="form-control" id="edebt-bank"><option value="">— لا يوجد —</option></select></div>
   <div class="form-group"><label class="form-label">ملاحظات</label><input class="form-control" id="edebt-notes"></div>
