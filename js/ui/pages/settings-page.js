@@ -1,5 +1,5 @@
 // ══════════════════════════════════════════════════════════════════
-//  pages/settings-page.js — صفحة الإعدادات (العرض فقط)
+//  pages/settings-page.js — صفحة الإعدادات
 //  يستخدم دوال core/settings.js
 // ══════════════════════════════════════════════════════════════════
 import { APP_SETTINGS, conn } from '../../state.js';
@@ -21,5 +21,4 @@ export const removeSettingsCurrency = coreRemoveCurrency;
 export const saveGeneralSettings = coreSaveGeneral;
 export const saveGoldApiKey = coreSaveGoldApiKey;
 
-// متوافق مع onclick القديم
 export function saveGeneralSettingsCompat() { return coreSaveGeneral(); }
