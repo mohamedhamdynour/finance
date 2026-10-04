@@ -1,5 +1,6 @@
 // ══════════════════════════════════════════════════════════════════
 //  pages/reports.js — التقارير والتحليل + تصدير PDF/Excel
+//  ⚠️ يستثني الشهادات المُستردّة (matured_at) من الإجماليات
 // ══════════════════════════════════════════════════════════════════
 import { DB, UI, APP_SETTINGS, CHARTS } from '../../state.js';
 import { N2, fmt, fmtN, fmtK, pct, sign, cls, today, escapeHtml, getBankColor, toEGP, baseCur, MARKET_NAMES, MARKET_COLORS } from '../../core/utils.js';
@@ -7,7 +8,10 @@ import { PALETTE } from '../charts.js';
 import { toast } from '../toast.js';
 import { kpi, svgIcon, getReportPeriodBounds } from '../shared.js';
 import { mkPie, mkBar, mkLine, destroyChart } from '../charts.js';
-import { calcTotals, calcTotalsForPeriod, getHoldings, getMetalHoldings, getStockPrice, getMetalPrice } from '../../domain/calc.js';
+import {
+  calcTotals, calcTotalsForPeriod, getHoldings, getMetalHoldings,
+  getStockPrice, getMetalPrice, getActiveCerts, getMaturedCerts, isActiveCert
+} from '../../domain/calc.js';
 
 const isDark = () => document.body.classList.contains('dark');
 const gc = () => isDark() ? '#1e2d47' : '#e8edf5';
@@ -18,9 +22,11 @@ const tc = () => isDark() ? '#4a6080' : '#7a8ba8';
 export function renderReports() {
   const { pStart, pEnd } = getReportPeriodBounds();
   const PT = calcTotalsForPeriod(pStart, pEnd);
-  const { h, mh, grand, totalBanks, stocksVal, stocksCost, metalsVal, metalsCost,
-          certsTotal, certsPaid, divTotal, pnlStocks, pnlMetals, totalPnl,
-          debtsOwed, debtsOwing, realizedStockPnl, cashIn, cashOut } = PT;
+  const {
+    h, mh, grand, totalBanks, stocksVal, stocksCost, metalsVal, metalsCost,
+    certsTotal, certsPaid, divTotal, pnlStocks, pnlMetals, totalPnl,
+    debtsOwed, debtsOwing, realizedStockPnl, cashIn, cashOut
+  } = PT;
   const invested = stocksCost + metalsCost + certsTotal;
   const roi = invested > 0 ? totalPnl / invested * 100 : 0;
   const retS = stocksCost > 0 ? pnlStocks / stocksCost * 100 : 0;
@@ -31,11 +37,16 @@ export function renderReports() {
   if (lu) lu.textContent = new Date().toLocaleString('ar-EG') + ' | الفترة: ' + periodLabel;
 
   // ═══ KPIs ═══
+  const activeCerts = getActiveCerts();
+  const maturedCerts = getMaturedCerts();
+  const maturedRefunded = maturedCerts.reduce((a, c) => a + N2(c.matured_amount || 0), 0);
+
   document.getElementById('report-kpis').innerHTML =
     kpi('إجمالي المحفظة', fmt(grand), 'القيمة السوقية الحالية', 'var(--blue)', svgIcon('<path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/>'), roi) +
     kpi('رأس المال المستثمر', fmt(invested + totalBanks), 'إجمالي ما تم ضخه', 'var(--muted)', svgIcon('<line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6"/>')) +
     kpi('العائد الصافي', fmt(totalPnl), (roi >= 0 ? '+' : '') + roi.toFixed(2) + '% ROI', totalPnl >= 0 ? 'var(--green)' : 'var(--red)', svgIcon('<polyline points="22 7 13.5 15.5 8.5 10.5 2 17"/>'), roi) +
     kpi('دخل الفترة', fmt(certsPaid + divTotal + realizedStockPnl), 'عوائد + توزيعات + مبيعات', 'var(--teal)', svgIcon('<polyline points="20 6 9 17 4 12"/>')) +
+    (maturedCerts.length > 0 ? kpi('شهادات مُستردّة', fmt(maturedRefunded), `${maturedCerts.length} شهادة (تاريخي)`, 'var(--muted)', svgIcon('<polyline points="20 6 9 17 4 12"/>')) : '') +
     (debtsOwed > 0 ? kpi('صافي الثروة', fmt(grand - debtsOwed), 'المحفظة ناقص الالتزامات', grand - debtsOwed >= 0 ? 'var(--green)' : 'var(--red)', svgIcon('<path d="M20.84 4.61a5.5 5.5 0 00-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 00-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 000-7.78"/>')) : '');
 
   // ═══ بطاقات الفئات ═══
@@ -44,7 +55,7 @@ export function renderReports() {
     { l: 'البنوك', v: totalBanks, p: grand ? totalBanks / grand * 100 : 0, sub: DB.banks.filter(b => b.is_active !== false).length + ' حساب', c: 'var(--teal)', pnl: null },
     { l: 'الأسهم', v: stocksVal, p: grand ? stocksVal / grand * 100 : 0, sub: (retS >= 0 ? '+' : '') + retS.toFixed(1) + '% عائد', c: retS >= 0 ? 'var(--green)' : 'var(--red)', pnl: pnlStocks },
     { l: 'المعادن', v: metalsVal, p: grand ? metalsVal / grand * 100 : 0, sub: (retM >= 0 ? '+' : '') + retM.toFixed(1) + '% عائد', c: retM >= 0 ? 'var(--gold)' : 'var(--red)', pnl: pnlMetals },
-    { l: 'الشهادات', v: certsTotal, p: grand ? certsTotal / grand * 100 : 0, sub: 'مُصرَّف: ' + fmt(certsPaid), c: 'var(--purple)', pnl: certsPaid > 0 ? certsPaid : null }
+    { l: 'الشهادات النشطة', v: certsTotal, p: grand ? certsTotal / grand * 100 : 0, sub: `${activeCerts.length} نشطة · مُصرَّف: ${fmt(certsPaid)}`, c: 'var(--purple)', pnl: certsPaid > 0 ? certsPaid : null }
   ].map(c => `<div class="card" style="border-right:3px solid ${c.c};margin-bottom:0"><div class="card-body" style="padding:14px">
     <div style="font-size:10px;color:var(--muted);font-weight:800;margin-bottom:6px">${c.l}</div>
     <div style="font-size:20px;font-weight:900;color:${c.c};margin-bottom:4px">${fmt(c.v)}</div>
@@ -103,6 +114,58 @@ export function renderReports() {
     } else debtsEl.innerHTML = '';
   }
 
+  // ═══ الشهادات المُستردّة ═══
+  const maturedEl = document.getElementById('r-matured-section');
+  if (maturedEl) {
+    if (maturedCerts.length) {
+      maturedEl.innerHTML = `
+        <div class="card" style="margin-top:16px">
+          <div class="card-header">
+            <div class="card-title">
+              <div class="card-title-icon" style="background:var(--surface2);color:var(--muted)">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>
+              </div>
+              الشهادات المُستردّة (تاريخي) — ${maturedCerts.length} شهادة
+            </div>
+            <div style="font-size:11px;color:var(--muted)">
+              إجمالي المُستردّ: <strong style="color:var(--green)">${fmt(maturedRefunded)}</strong>
+            </div>
+          </div>
+          <div class="card-body no-pad">
+            <div class="table-wrap"><table>
+              <thead><tr>
+                <th>الشهادة</th>
+                <th>البنك</th>
+                <th style="text-align:left;direction:ltr">المبلغ الأصلي</th>
+                <th style="text-align:left;direction:ltr">مُستردّ</th>
+                <th>تاريخ الاستحقاق</th>
+                <th>تاريخ الاسترداد</th>
+                <th>الحالة</th>
+              </tr></thead>
+              <tbody>
+                ${maturedCerts.map(c => {
+                  const bank = DB.banks.find(b => b.id === c.bank_id);
+                  const isSettled = !!c.matured_at;
+                  const refund = c.matured_amount || (N2(c.amount) + Math.max(0, N2(c.total_interest) - N2(c.interest_paid)));
+                  const settledAt = c.matured_at ? new Date(c.matured_at).toLocaleDateString('ar-EG') : '—';
+                  return `<tr>
+                    <td style="font-weight:700">${escapeHtml(c.name)}</td>
+                    <td class="muted">${escapeHtml(c.bank_name || '—')}</td>
+                    <td class="td-num" style="direction:ltr">${fmtN(c.amount)}</td>
+                    <td class="td-num pos" style="direction:ltr">+${fmtN(refund)}</td>
+                    <td>${c.maturity_date}</td>
+                    <td>${settledAt}</td>
+                    <td>${isSettled ? '<span class="badge badge-green">مُستردّة</span>' : '<span class="badge badge-gold">بحاجة للاسترداد</span>'}</td>
+                  </tr>`;
+                }).join('')}
+              </tbody>
+            </table></div>
+          </div>
+        </div>
+      `;
+    } else maturedEl.innerHTML = '';
+  }
+
   // ═══ القوائم المالية ═══
   buildFinancialStatement(PT, periodLabel);
   buildIncomeStatement(PT, periodLabel);
@@ -115,15 +178,18 @@ export function renderReports() {
 // ══════════════════ القائمة المالية التفصيلية ══════════════════
 
 function buildFinancialStatement(PT, periodLabel) {
-  const { h, mh, grand, totalBanks, stocksVal, stocksCost, metalsVal, metalsCost,
-          certsTotal, certsPaid, pnlStocks, pnlMetals, totalPnl,
-          debtsOwed, debtsOwing } = PT;
+  const {
+    h, mh, grand, totalBanks, stocksVal, stocksCost, metalsVal, metalsCost,
+    certsTotal, certsPaid, pnlStocks, pnlMetals, totalPnl,
+    debtsOwed, debtsOwing
+  } = PT;
   const invested = stocksCost + metalsCost + certsTotal;
   const roi = invested > 0 ? totalPnl / invested * 100 : 0;
   const retS = stocksCost > 0 ? pnlStocks / stocksCost * 100 : 0;
   const retM = metalsCost > 0 ? pnlMetals / metalsCost * 100 : 0;
 
   let fs = '';
+
   fs += `<tr class="tr-section"><td colspan="7" style="padding:8px 14px">الحسابات البنكية — ${fmt(totalBanks)}</td></tr>`;
   DB.banks.forEach(b => {
     const bv = toEGP(N2(b.balance), b.currency || 'EGP');
@@ -143,6 +209,7 @@ function buildFinancialStatement(PT, periodLabel) {
     });
     fs += `<tr class="fs-subtotal"><td>المجموع — أسهم</td><td class="td-num" style="direction:ltr">${fmt(stocksCost)}</td><td class="td-num" style="direction:ltr">${fmt(stocksVal)}</td><td class="td-num ${cls(pnlStocks)}" style="direction:ltr">${sign(pnlStocks)}${fmt(pnlStocks)}</td><td class="td-num ${cls(retS)}" style="direction:ltr">${sign(retS)}${retS.toFixed(2)}%</td><td style="text-align:center">100%</td><td style="text-align:center;font-weight:800">${pct(stocksVal, grand)}</td></tr>`;
   }
+
   if (Object.keys(mh).length) {
     const retM2 = metalsCost > 0 ? pnlMetals / metalsCost * 100 : 0;
     fs += `<tr class="tr-section"><td colspan="7" style="padding:8px 14px">المعادن الثمينة — ${(retM2 >= 0 ? '+' : '') + retM2.toFixed(2)}%</td></tr>`;
@@ -156,14 +223,30 @@ function buildFinancialStatement(PT, periodLabel) {
     });
     fs += `<tr class="fs-subtotal"><td>المجموع — معادن</td><td class="td-num" style="direction:ltr">${fmt(metalsCost)}</td><td class="td-num" style="direction:ltr">${fmt(metalsVal)}</td><td class="td-num ${cls(pnlMetals)}" style="direction:ltr">${sign(pnlMetals)}${fmt(pnlMetals)}</td><td class="td-num ${cls(retM2)}" style="direction:ltr">${sign(retM2)}${retM2.toFixed(2)}%</td><td style="text-align:center">100%</td><td style="text-align:center;font-weight:800">${pct(metalsVal, grand)}</td></tr>`;
   }
-  if (DB.certs.length) {
-    fs += `<tr class="tr-section"><td colspan="7" style="padding:8px 14px">الشهادات الادخارية — مُصرَّف في الفترة: ${fmt(certsPaid)}</td></tr>`;
-    DB.certs.forEach(c => {
+
+  // ✅ الشهادات: نشطة فقط في القائمة الرئيسية
+  const activeCerts = getActiveCerts();
+  if (activeCerts.length) {
+    fs += `<tr class="tr-section"><td colspan="7" style="padding:8px 14px">الشهادات النشطة — مُصرَّف في الفترة: ${fmt(certsPaid)}</td></tr>`;
+    activeCerts.forEach(c => {
       const rc = N2(c.amount) > 0 ? N2(c.interest_paid) / N2(c.amount) * 100 : 0;
       fs += `<tr><td style="padding-right:28px;font-weight:700;color:var(--purple)">${escapeHtml(c.name)}${c.bank_name ? ' — ' + escapeHtml(c.bank_name) : ''}</td><td class="td-num" style="direction:ltr">${fmt(c.amount)}</td><td class="td-num" style="direction:ltr;font-weight:700">${fmt(N2(c.amount) + N2(c.interest_paid))}</td><td class="td-num ${N2(c.interest_paid) > 0 ? 'pos' : ''}" style="direction:ltr">${N2(c.interest_paid) > 0 ? '+' + fmt(c.interest_paid) : '—'}</td><td class="td-num ${rc > 0 ? 'pos' : ''}" style="direction:ltr">${rc > 0 ? rc.toFixed(2) + '%' : '—'}</td><td style="text-align:center">${pct(N2(c.amount), certsTotal)}</td><td style="text-align:center">${pct(N2(c.amount), grand)}</td></tr>`;
     });
-    fs += `<tr class="fs-subtotal"><td>المجموع — شهادات</td><td class="td-num" style="direction:ltr">${fmt(certsTotal)}</td><td class="td-num" style="direction:ltr">${fmt(certsTotal + certsPaid)}</td><td class="td-num pos" style="direction:ltr">+${fmt(certsPaid)}</td><td>—</td><td style="text-align:center">100%</td><td style="text-align:center;font-weight:800">${pct(certsTotal, grand)}</td></tr>`;
+    fs += `<tr class="fs-subtotal"><td>المجموع — شهادات نشطة</td><td class="td-num" style="direction:ltr">${fmt(certsTotal)}</td><td class="td-num" style="direction:ltr">${fmt(certsTotal + certsPaid)}</td><td class="td-num pos" style="direction:ltr">+${fmt(certsPaid)}</td><td>—</td><td style="text-align:center">100%</td><td style="text-align:center;font-weight:800">${pct(certsTotal, grand)}</td></tr>`;
   }
+
+  // ✅ الشهادات المُستردّة (تاريخي)
+  const maturedCerts = getMaturedCerts();
+  if (maturedCerts.length) {
+    const maturedTotal = maturedCerts.reduce((a, c) => a + N2(c.matured_amount || c.amount), 0);
+    fs += `<tr class="tr-section"><td colspan="7" style="padding:8px 14px;background:var(--surface2);color:var(--muted)">الشهادات المُستردّة (خارج المحفظة) — ${maturedCerts.length} شهادة</td></tr>`;
+    maturedCerts.forEach(c => {
+      const refund = N2(c.matured_amount || (N2(c.amount) + Math.max(0, N2(c.total_interest) - N2(c.interest_paid))));
+      fs += `<tr style="opacity:.7"><td style="padding-right:28px;color:var(--muted)">${escapeHtml(c.name)}${c.bank_name ? ' — ' + escapeHtml(c.bank_name) : ''} <span style="font-size:10px">(مُستردّة)</span></td><td class="td-num" style="direction:ltr">${fmt(c.amount)}</td><td class="td-num pos" style="direction:ltr">+${fmt(refund)}</td><td>—</td><td>—</td><td>—</td><td>—</td></tr>`;
+    });
+    fs += `<tr class="fs-subtotal" style="opacity:.7"><td>المجموع — مُستردّ</td><td>—</td><td class="td-num" style="direction:ltr">${fmt(maturedTotal)}</td><td colspan="4" style="font-size:11px;color:var(--muted)">تم استردادها للحسابات البنكية</td></tr>`;
+  }
+
   if (DB.debts.length) {
     fs += `<tr class="tr-section"><td colspan="7" style="padding:8px 14px">الديون والالتزامات</td></tr>`;
     DB.debts.forEach(d => {
@@ -172,6 +255,7 @@ function buildFinancialStatement(PT, periodLabel) {
     });
     fs += `<tr class="fs-subtotal"><td>صافي الديون</td><td>—</td><td class="td-num ${cls(debtsOwing - debtsOwed)}" style="direction:ltr">${sign(debtsOwing - debtsOwed)}${fmt(Math.abs(debtsOwing - debtsOwed))}</td><td colspan="4"></td></tr>`;
   }
+
   fs += `<tr class="fs-grand"><td>صافي الثروة — ${escapeHtml(periodLabel)}</td><td class="td-num" style="direction:ltr;font-size:13px">${fmt(invested + totalBanks)}</td><td class="td-num" style="direction:ltr;font-size:14px;font-weight:900">${fmt(grand - debtsOwed)}</td><td class="td-num ${cls(totalPnl)}" style="direction:ltr">${sign(totalPnl)}${fmt(totalPnl)}</td><td class="td-num ${cls(roi)}" style="direction:ltr">${sign(roi)}${roi.toFixed(2)}%</td><td colspan="2" style="text-align:center;color:var(--muted);font-size:11px">الفترة: ${escapeHtml(periodLabel)}</td></tr>`;
 
   document.getElementById('r-detail-tbody').innerHTML = fs;
@@ -187,7 +271,7 @@ function buildIncomeStatement(PT, periodLabel) {
   const incRow = (label, val, indent = false, bold = false) =>
     `<tr class="${bold ? 'fs-subtotal' : ''}"><td style="${indent ? 'padding-right:28px' : 'font-weight:700'}">${escapeHtml(label)}</td><td class="td-num ${cls(val)}" style="direction:ltr;${bold ? 'font-weight:800' : ''}">${sign(val)}${fmt(Math.abs(val))}</td></tr>`;
 
-  let inc = '<tr class="tr-section"><td colspan="2" style="padding:8px 14px">الدخل المحقق (Realized)</td></tr>';
+  let inc = '<tr class="tr-section"><td colspan="2" style="padding:8px 14px">الدخل المحقق</td></tr>';
   inc += incRow('توزيعات أرباح الأسهم المستلمة', divTotal, true);
   inc += incRow('عوائد الشهادات الادخارية المصروفة', certsPaid, true);
   inc += incRow('أرباح/خسائر محققة من بيع الأسهم', realizedStockPnl, true);
@@ -233,8 +317,10 @@ function buildCashFlowStatement(PT, periodLabel) {
 // ══════════════════ الرسوم البيانية ══════════════════
 
 export function renderReportCharts(PT) {
-  const { h, mh, totalBanks, stocksVal, metalsVal, certsTotal,
-          pnlStocks, pnlMetals, certsPaid, divTotal, realizedStockPnl } = PT;
+  const {
+    h, mh, totalBanks, stocksVal, metalsVal, certsTotal,
+    pnlStocks, pnlMetals, certsPaid, divTotal, realizedStockPnl
+  } = PT;
   const { pStart: rStart, pEnd: rEnd } = getReportPeriodBounds();
 
   const pd = [
@@ -299,9 +385,10 @@ export function renderReportCharts(PT) {
     }
   }
 
-  // ─── شهادات (باستخدام CHARTS الموحد) ───
-  if (DB.certs.length) {
-    const sorted = [...DB.certs].sort((a, b) => a.maturity_date > b.maturity_date ? 1 : -1);
+  // ✅ شهادات نشطة فقط
+  const activeCerts = getActiveCerts();
+  if (activeCerts.length) {
+    const sorted = [...activeCerts].sort((a, b) => a.maturity_date > b.maturity_date ? 1 : -1);
     destroyChart('r-certs');
     const cv = document.getElementById('r-certs');
     if (cv && window.Chart) {
@@ -325,6 +412,8 @@ export function renderReportCharts(PT) {
         }
       });
     }
+  } else {
+    destroyChart('r-certs');
   }
 
   const bd = DB.banks.filter(b => b.is_active !== false && toEGP(N2(b.balance), b.currency || 'EGP') > 0);
@@ -387,7 +476,7 @@ export function updateReportCurrencyCard() {
     { label: 'الأرصدة البنكية', val: T.totalBanks, color: 'var(--teal)' },
     { label: 'الأسهم', val: T.stocksVal, color: 'var(--green)' },
     { label: 'المعادن', val: T.metalsVal, color: 'var(--gold)' },
-    { label: 'الشهادات', val: T.certsTotal, color: 'var(--purple)' }
+    { label: 'الشهادات النشطة', val: T.certsTotal, color: 'var(--purple)' }
   ];
 
   const grid = document.getElementById('r-currency-grid');
@@ -426,7 +515,7 @@ export async function exportPDF() {
       kv('الحسابات البنكية والنقد', fmt(T.totalBanks)) +
       kv('الأسهم والصناديق', fmt(T.stocksVal)) +
       kv('المعادن الثمينة', fmt(T.metalsVal)) +
-      kv('الشهادات الادخارية', fmt(T.certsTotal)) +
+      kv('الشهادات النشطة', fmt(T.certsTotal)) +
       kv('ديون لك', fmt(T.debtsOwing)) +
       kv('ديون عليك', fmt(-T.debtsOwed), 'neg'));
 
@@ -454,8 +543,20 @@ export async function exportPDF() {
         return `<tr><td>${escapeHtml(bt)}</td><td>${escapeHtml(v.title || '—')}</td><td class="n">${fmtN(v.weight, 3)}</td><td class="n">${fmtN(v.avgPrice)}</td><td class="n">${fmtN(cp)}</td><td class="n">${fmt(cv)}</td><td class="n ${pl >= 0 ? 'pos' : 'neg'}">${pl >= 0 ? '+' : ''}${fmt(pl)}</td></tr>`;
       }).join(''));
 
+    // ✅ شهادات نشطة فقط في التقرير
+    const activeCerts = getActiveCerts();
     const certs = table(['الشهادة','البنك','المبلغ','الفائدة %','الإصدار','الاستحقاق','عائد مُصرف','إجمالي الفائدة'],
-      DB.certs.map(c => `<tr><td>${escapeHtml(c.name)}</td><td>${escapeHtml(c.bank_name || '—')}</td><td class="n">${fmt(c.amount)}</td><td class="n">${c.rate}%</td><td>${c.issued_date}</td><td>${c.maturity_date}</td><td class="n">${fmt(c.interest_paid)}</td><td class="n">${fmt(c.total_interest)}</td></tr>`).join(''));
+      activeCerts.map(c => `<tr><td>${escapeHtml(c.name)}</td><td>${escapeHtml(c.bank_name || '—')}</td><td class="n">${fmt(c.amount)}</td><td class="n">${c.rate}%</td><td>${c.issued_date}</td><td>${c.maturity_date}</td><td class="n">${fmt(c.interest_paid)}</td><td class="n">${fmt(c.total_interest)}</td></tr>`).join(''));
+
+    const maturedCerts = getMaturedCerts();
+    const maturedTable = maturedCerts.length ? table(
+      ['الشهادة','البنك','المبلغ الأصلي','مُستردّ','تاريخ الاستحقاق','تاريخ الاسترداد'],
+      maturedCerts.map(c => {
+        const refund = c.matured_amount || (N2(c.amount) + Math.max(0, N2(c.total_interest) - N2(c.interest_paid)));
+        const settled = c.matured_at ? new Date(c.matured_at).toLocaleDateString('ar-EG') : '—';
+        return `<tr><td>${escapeHtml(c.name)}</td><td>${escapeHtml(c.bank_name || '—')}</td><td class="n">${fmt(c.amount)}</td><td class="n pos">+${fmt(refund)}</td><td>${c.maturity_date}</td><td>${settled}</td></tr>`;
+      }).join('')
+    ) : '';
 
     const detail = `<table><thead><tr><th>البند</th><th>التكلفة</th><th>القيمة الحالية</th><th>ر/خ</th><th>عائد %</th><th>من الفئة</th><th>من المحفظة</th></tr></thead><tbody>${document.getElementById('r-detail-tbody').innerHTML}</tbody></table>`;
     const income = `<table><tbody>${document.getElementById('r-income-tbody').innerHTML}</tbody></table>`;
@@ -492,7 +593,8 @@ export async function exportPDF() {
       ${sec('٥. قائمة التدفقات النقدية (' + pStart + ' → ' + pEnd + ')', cashflow)}
       ${sec('٦. حيازات الأسهم والصناديق', stocks)}
       ${sec('٧. المعادن الثمينة', metals)}
-      ${sec('٨. الشهادات الادخارية', certs)}
+      ${sec('٨. الشهادات النشطة', certs)}
+      ${maturedTable ? sec('٩. الشهادات المُستردّة (تاريخي)', maturedTable) : ''}
       <footer>تم إنشاء هذا التقرير آليًا — الأرقام حتى ${today()}</footer>
     </body></html>`;
 
