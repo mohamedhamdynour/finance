@@ -79,16 +79,38 @@ export async function api(path, method = 'GET', body = null, opts = {}) {
 
 // ─── اختصارات CRUD ─────────────────────────────────────────────
 export const sbGet = (t, q = '') => api(t + q);
-export const sbPost = (t, b) => api(t, 'POST', b);
+
+function injectUserContext(body) {
+  if (!body) return body;
+  const ctxUid = conn.viewingUserId;
+  const myUid = conn.authSession?.user?.id;
+  if (!ctxUid || ctxUid === myUid) return body;
+
+  if (Array.isArray(body)) {
+    return body.map(row => {
+      if (row && typeof row === 'object' && !row.user_id) {
+        return { ...row, user_id: ctxUid };
+      }
+      return row;
+    });
+  }
+  if (typeof body === 'object' && !body.user_id) {
+    return { ...body, user_id: ctxUid };
+  }
+  return body;
+}
+
+export const sbPost = (t, b) => api(t, 'POST', injectUserContext(b));
 export const sbPatch = (t, id, b) => api(t + '?id=eq.' + id, 'PATCH', b);
 export const sbDel = (t, id) => api(t + '?id=eq.' + id, 'DELETE');
 
 // ─── Upsert (INSERT مع merge-duplicates) ──────────────────────
 export async function sbUpsert(t, b) {
+  const body = injectUserContext(b);
   const r = await fetch(conn.SB_URL + '/rest/v1/' + t, {
     method: 'POST',
     headers: { ...authHeaders(), 'Prefer': 'return=representation,resolution=merge-duplicates' },
-    body: JSON.stringify(b)
+    body: JSON.stringify(body)
   });
   const j = await r.json();
   if (!r.ok) {
