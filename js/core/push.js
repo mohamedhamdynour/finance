@@ -7,7 +7,7 @@ import { sbGet, sbPost, sbPatch, sbDel } from './supabase.js';
 // ⚠️ VAPID public key — يجب أن تُنشئها أنت (راجع الدليل)
 // يمكنك توليدها من: https://web-push-codelab.glitch.me/
 // أو من Supabase Edge Function (المذكور في الأدلة)
-const VAPID_PUBLIC_KEY = 'BDxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx';
+const VAPID_PUBLIC_KEY = 'BI6urLT4zrUygFKRvR4HxsdV7VAfTE9NS2YoSaTNwd_n4Xtstpwa8Yfe9AyuIb1eqm0ucOXgD1Qff5c1XLeHaUs';
 
 function urlBase64ToUint8Array(base64String) {
   const padding = '='.repeat((4 - base64String.length % 4) % 4);
