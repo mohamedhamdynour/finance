@@ -17,6 +17,8 @@ Scope: static review and targeted regression tests. This is not a full penetrati
 - Added a dashboard warning for configured foreign currencies with missing/invalid exchange rates.
 - Masked GoldAPI and Telegram bot tokens in the settings UI; migrated legacy token copies to device-local storage and excluded them from subsequent Supabase settings writes.
 - Added paginated Supabase reads and used them for full application data loads and backup exports, avoiding silent truncation at the default per-response row cap.
+- Added tests for paginated reads and centralized cloud-settings sanitization so provider credentials are excluded from every cloud insert/update path.
+- Added an accessible mobile navigation drawer with an overlay, touch-sized toggle, close-on-navigation behavior, and responsive full-width content on narrow screens.
 - Added isolated Web Crypto API primitives for AES-256-GCM authenticated encryption, PBKDF2-SHA-256 key derivation, random salt/nonce generation, envelope validation, and tamper detection; added cryptographic regression tests. The primitives are not yet connected to IndexedDB or any user-data migration.
 - Corrected dangerous README instructions that falsely described `schema.sql` as safe to re-run.
 
@@ -64,7 +66,7 @@ The existing IndexedDB cache remains unencrypted. The crypto module is not yet w
 - Improved safe-area spacing for iPhone, modal scrolling, horizontal table scrolling, and keyboard focus outlines.
 - Kept two KPI columns on narrow phones to reduce excessive vertical scrolling.
 - Added reduced-motion handling for users who prefer less animation.
-- These changes are static CSS and still need visual verification on actual iPhone Safari and desktop browsers.
+- These changes include CSS and a small navigation interaction; they still need visual verification on actual iPhone Safari and desktop browsers.
 
 ## Validation status
 
