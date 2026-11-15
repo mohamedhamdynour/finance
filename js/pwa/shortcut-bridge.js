@@ -24,7 +24,7 @@ export function consumeShortcutParam(href) {
   return {
     found: true,
     action: ALLOWED_SHORTCUTS.has(requested) ? requested : null,
-    cleanUrl: url.pathname + url.search + url.hash
+    cleanUrl: url.pathname + url.hash
   };
 }
 
