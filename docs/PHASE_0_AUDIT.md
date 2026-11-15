@@ -17,6 +17,7 @@ Scope: static review and targeted regression tests. This is not a full penetrati
 - Added a dashboard warning for configured foreign currencies with missing/invalid exchange rates.
 - Masked GoldAPI and Telegram bot tokens in the settings UI; migrated legacy token copies to device-local storage and excluded them from subsequent Supabase settings writes.
 - Added paginated Supabase reads and used them for full application data loads and backup exports, avoiding silent truncation at the default per-response row cap.
+- Added isolated Web Crypto API primitives for AES-256-GCM authenticated encryption, PBKDF2-SHA-256 key derivation, random salt/nonce generation, envelope validation, and tamper detection; added cryptographic regression tests. The primitives are not yet connected to IndexedDB or any user-data migration.
 - Corrected dangerous README instructions that falsely described `schema.sql` as safe to re-run.
 
 ## Confirmed high-priority findings
@@ -52,8 +53,10 @@ This is an improvement, not a full secrets vault: localStorage remains accessibl
 ### 9. Security-definer SQL functions need a focused privilege review
 The schema defines multiple `SECURITY DEFINER` functions, including backup import, transfers, bank deletion, and portfolio summary. Some perform explicit authentication/authorization checks, but the final audit must verify function EXECUTE grants, owner privileges, RLS behavior, safe search paths, cross-user access, and behavior for shared viewer/editor roles. This review has not yet been completed against a live Supabase instance.
 
-### 10. Encryption and migration are not implemented yet
-The current IndexedDB cache is not encrypted. A secure local-first architecture needs explicit threat modeling, key derivation and rotation/recovery decisions, encrypted export/import, crash-safe migration, and tests proving that failed migration leaves the original data intact. Do not enable encryption or data migration until a recoverable backup is verified.
+### 10. Encryption primitives exist; storage migration is not implemented
+`js/security/crypto.js` now provides isolated AES-256-GCM authenticated encryption and PBKDF2-SHA-256 key derivation with 600,000 iterations, fresh 16-byte salt and 12-byte nonce, versioned envelopes, and tamper detection. Tests cover round-trip, nonce uniqueness, wrong passphrases, and ciphertext modification.
+
+The existing IndexedDB cache remains unencrypted. The crypto module is not yet wired into IndexedDB, cloud sync, backup/restore, or UI unlock flows. Before integration, define recovery/rotation behavior, test performance on real iPhone hardware, build a full backup/restore drill, and implement a crash-safe migration that preserves the original plaintext database until validation succeeds. Do not claim the app is encrypted until this integration is complete.
 
 ## UI/UX improvements
 
