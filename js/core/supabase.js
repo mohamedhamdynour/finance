@@ -107,6 +107,29 @@ export async function api(path, method = 'GET', body = null, opts = {}) {
 // ─── اختصارات CRUD ─────────────────────────────────────────────
 export const sbGet = (t, q = '') => api(appendUserFilter(t + q, t));
 
+// Fetch every row in bounded pages. Supabase/PostgREST commonly caps a single
+// response, so one GET must not be treated as a complete transaction history or backup.
+export async function sbGetAll(t, q = '', pageSize = 1000) {
+  if (!Number.isInteger(pageSize) || pageSize < 1 || pageSize > 1000) {
+    throw new RangeError('pageSize must be an integer between 1 and 1000');
+  }
+  const path = appendUserFilter(t + q, t);
+  const rows = [];
+  let offset = 0;
+  while (true) {
+    const page = await api(path, 'GET', null, {
+      headers: { Range: `${offset}-${offset + pageSize - 1}`, 'Range-Unit': 'items' }
+    });
+    if (!Array.isArray(page)) {
+      throw new Error(`Expected an array while paging table "${t}"`);
+    }
+    rows.push(...page);
+    if (page.length < pageSize) break;
+    offset += page.length;
+  }
+  return rows;
+}
+
 function injectUserContext(body) {
   if (!body) return body;
   const ctxUid = conn.viewingUserId;
