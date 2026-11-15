@@ -125,6 +125,19 @@ export const currencyName = (code) => {
   return c ? c.name : code;
 };
 
+// Returns configured foreign currencies whose exchange rate is missing or invalid.
+// Consumers should warn users instead of presenting silently inaccurate converted totals.
+export const getMissingExchangeRates = () => {
+  const currencies = Array.isArray(APP_SETTINGS.currencies) ? APP_SETTINGS.currencies : [];
+  return [...new Set(currencies
+    .map(c => typeof c === 'string' ? c : c?.code)
+    .filter(code => code && code !== 'EGP'))]
+    .filter(code => {
+      const rate = DB.exchangeRates.find(item => item.currency === code);
+      return !rate || !Number.isFinite(Number(rate.rate)) || Number(rate.rate) <= 0;
+    });
+};
+
 export const getRate = (cur) => {
   if (!cur || cur === 'EGP') return 1;
   const r = DB.exchangeRates.find(x => x.currency === cur);
