@@ -24,3 +24,13 @@ test('mobile controls account for iOS safe areas and keyboard focus', () => {
   assert.match(css, /:focus-visible/);
   assert.match(css, /prefers-reduced-motion: reduce/);
 });
+
+test('backup export and restore use encrypted envelopes and a dedicated passphrase dialog', () => {
+  assert.match(html, /id="modal-backup-passphrase"/);
+  assert.match(html, /id="backup-passphrase-confirm"/);
+  assert.match(main, /await encryptJson\(/);
+  assert.match(main, /await decryptJson\(/);
+  assert.match(main, /format: 'portfolio-encrypted-backup'/);
+  assert.match(main, /هذه نسخة احتياطية غير مشفرة/);
+  assert.match(main, /if \(!accepted\)[\s\S]*?input\.value = ''/);
+});
