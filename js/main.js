@@ -6,6 +6,7 @@
 import { DB, UI, APP_SETTINGS, CHARTS, conn, editCtx, marketCtx } from './state.js';
 import { N2, fmt, fmtN, fmtK, pct, today, baseCur, escapeHtml, toEGP, fromEGP, toEGPRaw, getRate, periodStart, getBankColor } from './core/utils.js';
 import { sbGet, sbGetAll, sbPost, sbPatch, sbDel, sbUpsert, sbRpc, sbPatchBy } from './core/supabase.js';
+import { encryptJson, decryptJson } from './security/crypto.js';
 import {
   initAuthGate, connectSupabase, disconnectSupabase, doLogin, doSignup, doLogout,
   setAuthTab, setAuthSuccessHandler, isAuthenticated, getCurrentUser
@@ -134,6 +135,74 @@ function initDarkMode() {
 // ══════════════════════════════════════════════════════════════════
 //  Sidebar + Navigation
 // ══════════════════════════════════════════════════════════════════
+let _vaultPassphraseResolver = null;
+
+function requestVaultPassphrase({ title, description, confirm = false } = {}) {
+  const titleEl = document.getElementById('backup-passphrase-title');
+  const descriptionEl = document.getElementById('backup-passphrase-description');
+  const confirmGroup = document.getElementById('backup-passphrase-confirm-group');
+  const input = document.getElementById('backup-passphrase-input');
+  const confirmInput = document.getElementById('backup-passphrase-confirm');
+  const error = document.getElementById('backup-passphrase-error');
+  if (!titleEl || !descriptionEl || !confirmGroup || !input || !confirmInput || !error) {
+    return Promise.reject(new Error('نافذة عبارة المرور غير متاحة.'));
+  }
+
+  if (_vaultPassphraseResolver) {
+    const previous = _vaultPassphraseResolver;
+    _vaultPassphraseResolver = null;
+    previous(null);
+  }
+  titleEl.textContent = title || 'عبارة مرور النسخة الاحتياطية';
+  descriptionEl.textContent = description || 'استخدم عبارة مرور لا تقل عن 12 حرفًا. لا يمكن استعادة النسخة المشفرة بدونها.';
+  confirmGroup.classList.toggle('hidden', !confirm);
+  input.value = '';
+  confirmInput.value = '';
+  error.textContent = '';
+
+  return new Promise(resolve => {
+    _vaultPassphraseResolver = resolve;
+    openModal('modal-backup-passphrase');
+    setTimeout(() => input.focus(), 50);
+  });
+}
+
+function finishVaultPassphrase(accepted) {
+  const resolve = _vaultPassphraseResolver;
+  if (!resolve) {
+    closeModal('modal-backup-passphrase');
+    return;
+  }
+  if (!accepted) {
+    _vaultPassphraseResolver = null;
+    closeModal('modal-backup-passphrase');
+    resolve(null);
+    return;
+  }
+
+  const input = document.getElementById('backup-passphrase-input');
+  const confirmGroup = document.getElementById('backup-passphrase-confirm-group');
+  const confirmInput = document.getElementById('backup-passphrase-confirm');
+  const error = document.getElementById('backup-passphrase-error');
+  const passphrase = input?.value || '';
+  if (passphrase.length < 12) {
+    if (error) error.textContent = 'استخدم عبارة مرور لا تقل عن 12 حرفًا.';
+    input?.focus();
+    return;
+  }
+  if (confirmGroup && !confirmGroup.classList.contains('hidden') && passphrase !== confirmInput?.value) {
+    if (error) error.textContent = 'عبارتا المرور غير متطابقتين.';
+    confirmInput?.focus();
+    return;
+  }
+
+  _vaultPassphraseResolver = null;
+  closeModal('modal-backup-passphrase');
+  if (input) input.value = '';
+  if (confirmInput) confirmInput.value = '';
+  resolve(passphrase);
+}
+
 function toggleSidebar() {
   document.getElementById('sidebar')?.classList.toggle('collapsed');
 }
@@ -683,6 +752,13 @@ async function loadAll(opts = {}) {
 //  Backup
 // ══════════════════════════════════════════════════════════════════
 async function exportBackup() {
+  const passphrase = await requestVaultPassphrase({
+    title: 'تشفير النسخة الاحتياطية',
+    description: 'أنشئ عبارة مرور قوية واحفظها في مكان آمن. ستحتاج إليها لاستعادة النسخة، ولا يمكن استرجاعها إذا فقدتها.',
+    confirm: true
+  });
+  if (!passphrase) return;
+
   try {
     const tables = ['banks','bank_transactions','stock_transactions','stock_prices','metal_transactions','metal_prices','certificates','dividends','recurring_transactions','financial_goals','exchange_rates','portfolio_snapshots','debts','debt_payments','installments','installment_payments','attachments'];
     const tableQuery = {
@@ -705,28 +781,54 @@ async function exportBackup() {
         throw e;
       }
     }
-    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+
+    const encrypted = await encryptJson({
+      formatVersion: 1,
+      exportedAt: new Date().toISOString(),
+      data
+    }, passphrase);
+    const backup = { format: 'portfolio-encrypted-backup', ...encrypted };
+    const blob = new Blob([JSON.stringify(backup, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
-    a.href = URL.createObjectURL(blob);
-    a.download = 'portfolio_backup_' + today() + '.json';
+    a.href = url;
+    a.download = 'portfolio_backup_' + today() + '.encrypted.json';
     a.click();
-    toast('تم تصدير النسخة الاحتياطية');
-  } catch (e) { toast('خطأ: ' + e.message, false); }
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+    toast('تم تصدير نسخة احتياطية مشفرة');
+  } catch (e) {
+    toast('تعذر إنشاء النسخة الاحتياطية: ' + e.message, false);
+  }
 }
 
 async function importBackup(input) {
   const file = input.files[0];
   if (!file) return;
   try {
-    const text = await file.text();
-    const data = JSON.parse(text);
+    let data = JSON.parse(await file.text());
     if (!data || typeof data !== 'object' || Array.isArray(data)) {
       throw new Error('ملف النسخة الاحتياطية غير صالح');
     }
+
+    if (data.format === 'portfolio-encrypted-backup') {
+      const passphrase = await requestVaultPassphrase({
+        title: 'فك تشفير النسخة الاحتياطية',
+        description: 'أدخل عبارة المرور التي استخدمتها عند إنشاء هذه النسخة.'
+      });
+      if (!passphrase) return;
+      const decrypted = await decryptJson(data, passphrase);
+      if (!decrypted || decrypted.formatVersion !== 1 || !decrypted.data || typeof decrypted.data !== 'object') {
+        throw new Error('محتوى النسخة الاحتياطية غير صالح.');
+      }
+      data = decrypted.data;
+    } else {
+      if (!confirm('هذه نسخة احتياطية غير مشفرة. قد تحتوي على بيانات مالية مقروءة مباشرة. هل تريد المتابعة في استيرادها؟')) return;
+    }
+
     for (const [table, rows] of Object.entries(data)) {
       if (!Array.isArray(rows)) throw new Error(`تنسيق غير صالح للجدول: ${table}`);
     }
-    if (!confirm('سيتم مسح البيانات الحالية واستبدالها. متابعة؟')) return;
+    if (!confirm('سيتم مسح البيانات الحالية واستبدالها ببيانات النسخة. تأكد أن لديك نسخة احتياطية حديثة. متابعة؟')) return;
     try {
       await sbRpc('import_backup_payload', { p_payload: data });
     } catch (e) {
@@ -738,8 +840,11 @@ async function importBackup(input) {
     }
     toast('تم الاستيراد بنجاح');
     await loadAll();
-  } catch (e) { toast('خطأ في الاستيراد: ' + e.message, false); }
-  input.value = '';
+  } catch (e) {
+    toast('خطأ في الاستيراد: ' + e.message, false);
+  } finally {
+    input.value = '';
+  }
 }
 
 // ══════════════════════════════════════════════════════════════════
@@ -853,7 +958,7 @@ function installOcrHandler() {
 function exposeGlobals() {
   // Core
   Object.assign(window, {
-    loadAll, renderPage, nav, toggleSidebar, toggleMobileNav, toast,
+    loadAll, renderPage, nav, toggleSidebar, toggleMobileNav, finishVaultPassphrase, toast,
     toggleDark, setPeriodFromSelect, applyGlobalCustomRange,
     toggleNotifications, openModal, closeModal,
     initAuthGate, connectSupabase, disconnectSupabase,
