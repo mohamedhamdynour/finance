@@ -9,14 +9,16 @@ import { N2 } from '../core/utils.js';
  * @param {number} principal - المبلغ الأصلي
  * @param {number} annualRatePct - الفائدة السنوية %
  * @param {number} months - عدد الأشهر
- * @returns {object}
+ * @returns {object|null}
  */
 export function calcLoan(principal, annualRatePct, months) {
   const P = N2(principal);
   const annualRate = N2(annualRatePct) / 100;
   const n = Math.floor(N2(months));
 
-  if (P <= 0 || n <= 0) return null;
+  if (!Number.isFinite(P) || !Number.isFinite(annualRate) || P <= 0 || annualRate < 0 || n <= 0) {
+    return null;
+  }
 
   // لو الفائدة 0 → قسط ثابت
   if (annualRate === 0) {
@@ -33,7 +35,12 @@ export function calcLoan(principal, annualRatePct, months) {
 
   const r = annualRate / 12;
   const factor = Math.pow(1 + r, n);
-  const monthly = P * r * factor / (factor - 1);
+  const denominator = factor - 1;
+  if (!Number.isFinite(factor) || denominator <= 0) return null;
+
+  const monthly = P * r * factor / denominator;
+  if (!Number.isFinite(monthly)) return null;
+
   const totalPayment = monthly * n;
   const totalInterest = totalPayment - P;
 
@@ -57,15 +64,16 @@ function buildSchedule(principal, monthlyRate, months, monthlyPayment) {
   let balance = principal;
 
   for (let i = 1; i <= months; i++) {
-    const interest = monthlyRate > 0 ? balance * monthlyRate : 0;
-    const principalPaid = monthlyPayment - interest;
+    const interest = balance * monthlyRate;
+    // أصل المسدد لا يمكن أن يتجاوز الرصيد المتبقي.
+    const principalPaid = Math.min(balance, Math.max(0, monthlyPayment - interest));
     balance = Math.max(0, balance - principalPaid);
 
     schedule.push({
       month: i,
-      payment: +monthlyPayment.toFixed(2),
+      payment: +(principalPaid + interest).toFixed(2),
       interest: +interest.toFixed(2),
-      principal: +principalPart.toFixed(2),
+      principal: +principalPaid.toFixed(2),
       balance: +balance.toFixed(2)
     });
   }
@@ -86,16 +94,23 @@ export function monthsToGoal(targetAmount, monthlySave, annualReturnPct, initial
   let balance = N2(initial);
   let months = 0;
 
-  if (balance >= target) return { months: 0, reached: true };
+  if (target <= 0) return { months: 0, reached: true, finalBalance: balance };
+  if (balance >= target) return { months: 0, reached: true, finalBalance: balance };
+  if (monthlyRate <= -1 || monthly < 0 || balance < 0) {
+    return { months: 0, reached: false, finalBalance: balance };
+  }
 
   while (balance < target && months < 1200) {
     balance = balance * (1 + monthlyRate) + monthly;
     months++;
+    if (!Number.isFinite(balance)) {
+      return { months, reached: false, finalBalance: null };
+    }
   }
 
   return {
     months,
-    reached: true,
+    reached: balance >= target,
     finalBalance: balance
   };
 }
