@@ -7,6 +7,7 @@ import { DB, UI, APP_SETTINGS, CHARTS, conn, editCtx, marketCtx } from './state.
 import { N2, fmt, fmtN, fmtK, pct, today, baseCur, escapeHtml, toEGP, fromEGP, toEGPRaw, getRate, periodStart, getBankColor } from './core/utils.js';
 import { sbGet, sbGetAll, sbPost, sbPatch, sbDel, sbUpsert, sbRpc, sbPatchBy } from './core/supabase.js';
 import { encryptJson, decryptJson } from './security/crypto.js';
+import { consumeShortcutParam } from './pwa/shortcut-bridge.js';
 import {
   initAuthGate, connectSupabase, disconnectSupabase, doLogin, doSignup, doLogout,
   setAuthTab, setAuthSuccessHandler, isAuthenticated, getCurrentUser
@@ -260,6 +261,56 @@ function nav(page) {
   document.getElementById('topbar-sub').textContent = titles[1];
   renderPage();
 }
+
+async function handleAppShortcut() {
+  let shortcut;
+  try {
+    shortcut = consumeShortcutParam(window.location.href);
+    if (!shortcut.found) return;
+    // Remove the action from the address bar before running it so refresh does not repeat it.
+    window.history.replaceState(null, '', shortcut.cleanUrl);
+  } catch (e) {
+    console.warn('[shortcut] could not parse action:', e.message);
+    return;
+  }
+  if (!shortcut.action) return;
+
+  switch (shortcut.action) {
+    case 'dashboard':
+      nav('dashboard');
+      break;
+    case 'net-worth':
+      nav('dashboard');
+      document.getElementById('dash-kpis')?.scrollIntoView({ behavior: 'auto', block: 'start' });
+      break;
+    case 'upcoming-liabilities':
+      nav('installments');
+      break;
+    case 'reports':
+      nav('reports');
+      break;
+    case 'add-income':
+      nav('banks');
+      openModal('modal-dep');
+      break;
+    case 'add-expense':
+      nav('banks');
+      openModal('modal-wit');
+      break;
+    case 'transfer':
+      nav('banks');
+      openModal('modal-transfer');
+      break;
+    case 'backup':
+      await exportBackup();
+      break;
+    case 'reminders':
+      nav('dashboard');
+      document.getElementById('dash-alerts')?.scrollIntoView({ behavior: 'auto', block: 'start' });
+      break;
+  }
+}
+
 
 function renderPage() {
   const p = UI.activePage;
@@ -871,6 +922,7 @@ async function onAuthSuccess() {
   await verifyCurrentContext();
 
   await loadAll();
+  await handleAppShortcut();
 
   // معالجة الشهادات المنتهية
   setTimeout(async () => {
@@ -962,7 +1014,7 @@ function installOcrHandler() {
 function exposeGlobals() {
   // Core
   Object.assign(window, {
-    loadAll, renderPage, nav, toggleSidebar, toggleMobileNav, finishVaultPassphrase, toast,
+    loadAll, renderPage, nav, toggleSidebar, toggleMobileNav, finishVaultPassphrase, handleAppShortcut, toast,
     toggleDark, setPeriodFromSelect, applyGlobalCustomRange,
     toggleNotifications, openModal, closeModal,
     initAuthGate, connectSupabase, disconnectSupabase,
