@@ -19,7 +19,7 @@ Scope: static review and targeted regression tests. This is not a full penetrati
 - Added paginated Supabase reads and used them for full application data loads and backup exports, avoiding silent truncation at the default per-response row cap.
 - Added tests for paginated reads and centralized cloud-settings sanitization so provider credentials are excluded from every cloud insert/update path.
 - Added an accessible mobile navigation drawer with an overlay, touch-sized toggle, close-on-navigation behavior, and responsive full-width content on narrow screens.
-- Added isolated Web Crypto API primitives for AES-256-GCM authenticated encryption, PBKDF2-SHA-256 key derivation, random salt/nonce generation, envelope validation, and tamper detection; added cryptographic regression tests. The primitives are not yet connected to IndexedDB or any user-data migration.
+- Added Web Crypto API primitives for AES-256-GCM authenticated encryption, PBKDF2-SHA-256 key derivation, random salt/nonce generation, envelope validation, and tamper detection; added cryptographic regression tests. Manual backup export now creates encrypted files through a dedicated passphrase modal, and import supports encrypted backups plus an explicit warning before legacy plaintext import.
 - Corrected dangerous README instructions that falsely described `schema.sql` as safe to re-run.
 
 ## Confirmed high-priority findings
@@ -56,9 +56,9 @@ This is an improvement, not a full secrets vault: localStorage remains accessibl
 The schema defines multiple `SECURITY DEFINER` functions, including backup import, transfers, bank deletion, and portfolio summary. Some perform explicit authentication/authorization checks, but the final audit must verify function EXECUTE grants, owner privileges, RLS behavior, safe search paths, cross-user access, and behavior for shared viewer/editor roles. This review has not yet been completed against a live Supabase instance.
 
 ### 10. Encryption primitives exist; storage migration is not implemented
-`js/security/crypto.js` now provides isolated AES-256-GCM authenticated encryption and PBKDF2-SHA-256 key derivation with 600,000 iterations, fresh 16-byte salt and 12-byte nonce, versioned envelopes, and tamper detection. Tests cover round-trip, nonce uniqueness, wrong passphrases, and ciphertext modification.
+`js/security/crypto.js` provides AES-256-GCM authenticated encryption and PBKDF2-SHA-256 key derivation with 600,000 iterations, fresh 16-byte salt and 12-byte nonce, versioned envelopes, and tamper detection. Manual backup export/import uses this envelope and a passphrase modal. Tests cover round-trip, nonce uniqueness, wrong passphrases, and ciphertext modification.
 
-The existing IndexedDB cache remains unencrypted. The crypto module is not yet wired into IndexedDB, cloud sync, backup/restore, or UI unlock flows. Before integration, define recovery/rotation behavior, test performance on real iPhone hardware, build a full backup/restore drill, and implement a crash-safe migration that preserves the original plaintext database until validation succeeds. Do not claim the app is encrypted until this integration is complete.
+The existing IndexedDB cache remains unencrypted, and cloud sync is not encrypted end-to-end. Backup export/import has not yet been validated through a restore drill against a disposable Supabase test account, and attachment-size/attachment-content recovery still needs explicit verification. Before changing storage, define passphrase recovery/rotation behavior, test performance on real iPhone hardware, and implement a crash-safe migration that preserves the original plaintext database until validation succeeds. Do not claim the app's live database is encrypted until this integration is complete.
 
 ## UI/UX improvements
 
@@ -80,7 +80,7 @@ The existing IndexedDB cache remains unencrypted. The crypto module is not yet w
 1. Finish the static audit and run all unit/asset tests against the final branch head.
 2. Add explicit currency metadata/validation and fix portfolio calculations only after confirming the storage semantics.
 3. Review RLS and all `SECURITY DEFINER` functions; add integration tests for owner, viewer, editor, and unauthorized users.
-4. Design a full, verified backup/restore format before changing storage.
+4. Run a full encrypted backup/restore drill against a disposable test account; verify all tables, attachments, and failure rollback before changing storage.
 5. Implement local encryption and a crash-safe migration behind an opt-in flow.
 6. Implement optional encrypted sync and conflict resolution.
 7. Finish iPhone PWA and Shortcut actions, then test on a real device.
