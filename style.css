@@ -682,3 +682,125 @@ body.dark .fs-grand td{background:linear-gradient(135deg,#172554,#1e1b4b)}
 
 body.dark select,body.dark input[type="date"],body.dark input[type="number"],body.dark input[type="text"]{color-scheme:dark}
 body.dark select{background:var(--surface2)!important;color:var(--text)!important;border-color:var(--border2)!important}
+
+
+/* ═══════════ ACCESSIBILITY + MOBILE UX HARDENING ═══════════ */
+/* Keep interactive controls usable on touch screens and with keyboard navigation. */
+:where(button, [role="button"], .nav-item, .notif-btn, select, input, textarea) {
+  touch-action: manipulation;
+}
+:where(button, [role="button"], .nav-item, .notif-btn, select, input, textarea):focus-visible {
+  outline: 3px solid var(--blue2);
+  outline-offset: 2px;
+}
+button:disabled, [role="button"][aria-disabled="true"] {
+  cursor: not-allowed;
+  opacity: .58;
+}
+input, select, textarea {
+  scroll-margin-block: 88px;
+}
+#main-content {
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+}
+.table-wrap {
+  max-width: 100%;
+  overscroll-behavior-inline: contain;
+  -webkit-overflow-scrolling: touch;
+}
+.modal {
+  max-height: calc(100dvh - env(safe-area-inset-top) - env(safe-area-inset-bottom) - 24px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+@media (max-width: 768px) {
+  .app {
+    height: 100dvh;
+    min-height: 0;
+  }
+  .topbar {
+    min-height: 56px;
+    height: auto;
+    padding: 8px 12px;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+  .topbar-actions {
+    width: 100%;
+    gap: 6px;
+  }
+  .topbar-actions > button,
+  .topbar-actions > .topbar-icon-btn,
+  .topbar-actions > .notif-btn {
+    min-width: 42px;
+    min-height: 42px;
+  }
+  .topbar-actions .period-select {
+    flex: 1 1 120px;
+    min-width: 0;
+    min-height: 42px;
+  }
+  .content {
+    padding: 12px 12px calc(20px + env(safe-area-inset-bottom));
+  }
+  .btn, .btn-icon, .form-control, input, select, textarea {
+    min-height: 42px;
+  }
+  .modal {
+    width: min(100%, 720px);
+    max-height: calc(100dvh - env(safe-area-inset-top) - env(safe-area-inset-bottom) - 16px);
+    margin: 0 auto;
+  }
+}
+@media (max-width: 480px) {
+  /* Two compact columns retain dashboard context without excessive scrolling. */
+  .kpi-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+  }
+  .kpi {
+    min-width: 0;
+    padding: 12px;
+  }
+  .kpi-value {
+    font-size: clamp(13px, 3.7vw, 17px);
+    overflow-wrap: anywhere;
+  }
+  .kpi-label, .kpi-sub {
+    overflow-wrap: anywhere;
+  }
+  .card-header, .card-body {
+    padding: 12px;
+  }
+  .topbar-title {
+    font-size: 15px;
+  }
+  .topbar-actions {
+    justify-content: stretch;
+  }
+  .topbar-actions .btn {
+    min-height: 42px;
+  }
+  .global-custom-range {
+    width: 100%;
+  }
+  .global-custom-range input[type="date"] {
+    min-width: 0;
+    flex: 1 1 110px;
+  }
+  .form-row, .form-row-3 {
+    gap: 10px;
+  }
+  .auth-gate {
+    padding: max(12px, env(safe-area-inset-top)) 12px max(12px, env(safe-area-inset-bottom));
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    scroll-behavior: auto !important;
+    animation-duration: .01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: .01ms !important;
+  }
+}
