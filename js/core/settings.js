@@ -39,15 +39,24 @@ export async function loadAppSettings() {
       if (localGoldApiKey === null && legacyGoldApiKey) {
         localStorage.setItem('goldapi_key_local', legacyGoldApiKey);
       }
-      if (Object.prototype.hasOwnProperty.call(rows[0].value, 'goldapi_key')) {
+      const legacyTelegramToken = rows[0].value.telegram?.bot_token || '';
+      const localTelegramToken = localStorage.getItem('telegram_bot_token_local');
+      if (localTelegramToken === null && legacyTelegramToken) {
+        localStorage.setItem('telegram_bot_token_local', legacyTelegramToken);
+      }
+      if (Object.prototype.hasOwnProperty.call(rows[0].value, 'goldapi_key') || legacyTelegramToken) {
         const safeCloudSettings = { ...rows[0].value };
         delete safeCloudSettings.goldapi_key;
+        if (safeCloudSettings.telegram) {
+          safeCloudSettings.telegram = { ...safeCloudSettings.telegram };
+          delete safeCloudSettings.telegram.bot_token;
+        }
         const uid = conn.authSession?.user?.id;
         if (uid) {
           try {
             await sbPatchBy('app_settings', 'user_id=eq.' + uid, { value: safeCloudSettings });
           } catch (e) {
-            console.warn('Could not remove legacy GoldAPI key from cloud settings:', e.message);
+            console.warn('Could not remove legacy provider secrets from cloud settings:', e.message);
           }
         }
       }
@@ -67,12 +76,22 @@ export async function loadAppSettings() {
         APP_SETTINGS.comparisons = { ...APP_SETTINGS.comparisons, ...rows[0].value.comparisons };
       }
       if (rows[0].value.telegram) {
-        APP_SETTINGS.telegram = { ...(APP_SETTINGS.telegram || {}), ...rows[0].value.telegram };
+        const remoteTelegram = rows[0].value.telegram;
+        const localToken = localStorage.getItem('telegram_bot_token_local');
+        APP_SETTINGS.telegram = {
+          ...(APP_SETTINGS.telegram || {}),
+          ...remoteTelegram,
+          bot_token: localToken !== null ? localToken : (remoteTelegram.bot_token || '')
+        };
       }
       conn.settingsBackend = 'supabase';
     } else {
       const initialCloudSettings = { ...APP_SETTINGS };
       delete initialCloudSettings.goldapi_key;
+      if (initialCloudSettings.telegram) {
+        initialCloudSettings.telegram = { ...initialCloudSettings.telegram };
+        delete initialCloudSettings.telegram.bot_token;
+      }
       await sbPost('app_settings', [{ value: initialCloudSettings }]);
       conn.settingsBackend = 'supabase';
     }
@@ -93,12 +112,24 @@ export async function loadAppSettings() {
       if (localGoldApiKey === null && parsed.goldapi_key) {
         localStorage.setItem('goldapi_key_local', parsed.goldapi_key);
       }
-      if (Object.prototype.hasOwnProperty.call(parsed, 'goldapi_key')) {
-        delete parsed.goldapi_key;
+      if (parsed.telegram) {
+        const localTelegramToken = localStorage.getItem('telegram_bot_token_local');
+        const legacyTelegramToken = parsed.telegram.bot_token || '';
+        APP_SETTINGS.telegram = {
+          ...(APP_SETTINGS.telegram || {}),
+          ...parsed.telegram,
+          bot_token: localTelegramToken !== null ? localTelegramToken : legacyTelegramToken
+        };
+        if (localTelegramToken === null && legacyTelegramToken) {
+          localStorage.setItem('telegram_bot_token_local', legacyTelegramToken);
+        }
+        delete parsed.telegram.bot_token;
+      }
+      if (Object.prototype.hasOwnProperty.call(parsed, 'goldapi_key')) delete parsed.goldapi_key;
+      if (Object.prototype.hasOwnProperty.call(parsed, 'goldapi_key') || parsed.telegram) {
         localStorage.setItem('appSettings', JSON.stringify(parsed));
       }
       if (parsed.zakat) APP_SETTINGS.zakat = { ...APP_SETTINGS.zakat, ...parsed.zakat };
-      if (parsed.telegram) APP_SETTINGS.telegram = { ...(APP_SETTINGS.telegram || {}), ...parsed.telegram };
     }
   } catch (e) {}
   normalizeCurrencies();
@@ -106,6 +137,10 @@ export async function loadAppSettings() {
 
 // ─── حفظ الإعدادات ──────────────────────────────────────────────
 export async function persistAppSettings() {
+  try {
+    localStorage.setItem('goldapi_key_local', APP_SETTINGS.goldapi_key || '');
+    localStorage.setItem('telegram_bot_token_local', APP_SETTINGS.telegram?.bot_token || '');
+  } catch (e) {}
   if (conn.settingsBackend === 'supabase') {
     try {
       const uid = conn.authSession?.user?.id;
@@ -116,6 +151,10 @@ export async function persistAppSettings() {
         if (rows && rows.length) {
           const settingsForCloud = { ...APP_SETTINGS };
           delete settingsForCloud.goldapi_key;
+          if (settingsForCloud.telegram) {
+            settingsForCloud.telegram = { ...settingsForCloud.telegram };
+            delete settingsForCloud.telegram.bot_token;
+          }
           await sbPatchBy('app_settings', 'user_id=eq.' + uid, { value: settingsForCloud });
         } else {
           const settingsForCloud = { ...APP_SETTINGS };
@@ -132,8 +171,13 @@ export async function persistAppSettings() {
   try {
     const localSettings = { ...APP_SETTINGS };
     delete localSettings.goldapi_key;
-    localStorage.setItem('appSettings', JSON.stringify(localSettings));
     localStorage.setItem('goldapi_key_local', APP_SETTINGS.goldapi_key || '');
+    if (localSettings.telegram) {
+      localSettings.telegram = { ...localSettings.telegram };
+      delete localSettings.telegram.bot_token;
+      localStorage.setItem('telegram_bot_token_local', APP_SETTINGS.telegram?.bot_token || '');
+    }
+    localStorage.setItem('appSettings', JSON.stringify(localSettings));
   } catch (e) {}
 }
 
