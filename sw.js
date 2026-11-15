@@ -6,7 +6,7 @@
 //    • عند انقطاع الشبكة → تُخدَّم الملفات الثابتة من الكاش
 // ══════════════════════════════════════════════════════════════════
 
-const CACHE_VERSION = 'v4.5.0';
+const CACHE_VERSION = 'v4.6.0';
 const CACHE_NAME = 'portfolio-' + CACHE_VERSION;
 
 const STATIC_ASSETS = [
@@ -76,6 +76,20 @@ const STATIC_ASSETS = [
   './js/ui/pages/heatmap.js',
   './js/domain/sharing.js',
 './js/ui/sharing-setup.js',
+  './js/core/errors.js',
+  './js/core/state.js',
+  './js/core/validation.js',
+  './js/domain/telegram.js',
+  './js/domain/zakat.js',
+  './js/repo/banks.repo.js',
+  './js/repo/certs.repo.js',
+  './js/repo/debts.repo.js',
+  './js/repo/index.js',
+  './js/repo/metals.repo.js',
+  './js/repo/stocks.repo.js',
+  './js/ui/modal.js',
+  './js/ui/router.js',
+  './js/ui/telegram-setup.js',
 ];
 
 // ─── Install: pre-cache app shell ────────────────────────────────
