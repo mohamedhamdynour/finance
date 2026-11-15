@@ -16,6 +16,7 @@ Scope: static review and targeted regression tests. This is not a full penetrati
 - Improved mobile touch targets, iOS safe-area spacing, compact dashboard KPI layout, keyboard focus visibility, and reduced-motion support in `style.css`.
 - Added a dashboard warning for configured foreign currencies with missing/invalid exchange rates.
 - Masked GoldAPI and Telegram bot tokens in the settings UI; migrated legacy token copies to device-local storage and excluded them from subsequent Supabase settings writes.
+- Added paginated Supabase reads and used them for full application data loads and backup exports, avoiding silent truncation at the default per-response row cap.
 - Corrected dangerous README instructions that falsely described `schema.sql` as safe to re-run.
 
 ## Confirmed high-priority findings
@@ -26,29 +27,32 @@ The script begins by dropping many tables and views with `CASCADE`. Re-running i
 ### 2. Offline app shell omitted local modules
 The service worker's static asset list omitted 14 tracked JavaScript modules, including repositories, validation, routing, and domain modules. Since the app is modular, some screens or flows could fail when offline after a fresh install/cache reset. The missing paths are now listed and a regression test checks declared assets.
 
-### 3. Local cache is not a full backup
+### 3. Complete reads and backup exports
+Supabase/PostgREST can cap a single response, so the previous one-request-per-table load/export could silently omit rows in large tables. This branch adds `sbGetAll()` with Range-based pagination and uses it for `loadAll()` and JSON backup export. This does not make the bounded IndexedDB cache a full backup, and it still needs a restore drill against a test account.
+
+### 4. Local cache is not a full backup
 `js/core/cache.js` limits cached bank transactions to 2,000 and portfolio snapshots to 100. It is a performance/offline cache, not a complete backup or guaranteed recovery mechanism. The planned backup system must export and restore all supported records and attachments, with validation.
 
-### 4. Service-worker caching scope
+### 5. Service-worker caching scope
 The previous fetch handler cached arbitrary same-origin GET responses. This branch restricts caching to URLs explicitly listed in `STATIC_ASSETS`, reducing the chance that future same-origin API responses are accidentally stored in Cache Storage. External API hosts remain network-only.
 
 ## High-priority items requiring further implementation/testing
 
-### 5. Currency consistency in total portfolio value
+### 6. Currency consistency in total portfolio value
 `calcTotals()` converts bank balances through `toEGP()`, but values for stocks, metals, certificates, dividends, and cost bases are summed directly. If those records can be denominated in different currencies, the grand total and P/L can be materially wrong. The correct fix depends on the exact meaning and storage currency of each price/amount field; do not blindly convert without confirming the data model.
 
-### 6. Missing exchange rates silently default to 1
+### 7. Missing exchange rates silently default to 1
 `getRate()` returns 1 when a non-EGP currency has no rate record. That can silently make a foreign-currency balance appear equal to the same nominal amount in EGP. This branch adds a dashboard warning for configured foreign currencies with missing/invalid rates, but it does not yet change the fallback conversion behavior. Prevent unsupported conversions from being presented as accurate in the next calculation-model revision.
 
-### 7. Provider tokens and browser storage
+### 8. Provider tokens and browser storage
 Before this branch, the GoldAPI key and Telegram bot token could be included in the JSON settings value persisted to Supabase and browser storage. This branch migrates legacy values to separate device-local storage, attempts to remove old copies from the Supabase settings row at login, and excludes the tokens from future cloud settings writes. The settings UI masks both tokens.
 
 This is an improvement, not a full secrets vault: localStorage remains accessible to scripts running in the same origin and to anyone with access to the unlocked browser profile. The Telegram Bot API also requires the token in its request path. For stronger protection, use a trusted server-side proxy/secrets manager or disable these integrations. Verify the migration on a test account before relying on it.
 
-### 8. Security-definer SQL functions need a focused privilege review
+### 9. Security-definer SQL functions need a focused privilege review
 The schema defines multiple `SECURITY DEFINER` functions, including backup import, transfers, bank deletion, and portfolio summary. Some perform explicit authentication/authorization checks, but the final audit must verify function EXECUTE grants, owner privileges, RLS behavior, safe search paths, cross-user access, and behavior for shared viewer/editor roles. This review has not yet been completed against a live Supabase instance.
 
-### 9. Encryption and migration are not implemented yet
+### 10. Encryption and migration are not implemented yet
 The current IndexedDB cache is not encrypted. A secure local-first architecture needs explicit threat modeling, key derivation and rotation/recovery decisions, encrypted export/import, crash-safe migration, and tests proving that failed migration leaves the original data intact. Do not enable encryption or data migration until a recoverable backup is verified.
 
 ## UI/UX improvements
