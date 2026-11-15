@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { N2, today, periodStart, periodEnd, toEGP, fromEGP, getRate } from '../js/core/utils.js';
+import { N2, today, periodStart, periodEnd, toEGP, fromEGP, getMissingExchangeRates } from '../js/core/utils.js';
 import { DB, APP_SETTINGS, UI } from '../js/state.js';
 
 test('N2 normalizes non-finite values without allowing Infinity into calculations', () => {
@@ -37,4 +37,16 @@ test('currency conversion round-trips using the configured exchange rate', () =>
   assert.equal(toEGP(2, 'USD'), 100);
   assert.equal(fromEGP(100, 'USD'), 2);
   DB.exchangeRates = [];
+});
+
+test('missing or invalid foreign exchange rates are surfaced for configured currencies', () => {
+  const oldCurrencies = APP_SETTINGS.currencies;
+  const oldRates = DB.exchangeRates;
+  APP_SETTINGS.currencies = [{ code: 'EGP', name: 'Egyptian pound' }, { code: 'USD', name: 'US dollar' }, { code: 'AED', name: 'UAE dirham' }];
+  DB.exchangeRates = [{ currency: 'USD', rate: 50 }, { currency: 'AED', rate: 0 }];
+  assert.deepEqual(getMissingExchangeRates(), ['AED']);
+  DB.exchangeRates = [{ currency: 'USD', rate: 50 }];
+  assert.deepEqual(getMissingExchangeRates(), ['AED']);
+  APP_SETTINGS.currencies = oldCurrencies;
+  DB.exchangeRates = oldRates;
 });
