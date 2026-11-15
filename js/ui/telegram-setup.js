@@ -57,11 +57,12 @@ export function renderTelegramCard() {
         <!-- Bot Token -->
         <div class="form-group">
           <label class="form-label">Bot Token</label>
-          <input class="form-control" type="text" id="tg-token"
+          <input class="form-control" type="password" id="tg-token"
                  value="${escapeHtml(cfg.bot_token)}"
                  placeholder="123456789:ABCdefGHIjklMNOpqrsTUVwxyz..."
-                 style="direction:ltr;text-align:left;font-family:monospace;font-size:11.5px">
-          <div class="form-hint">من <code>@BotFather</code> — احتفظ به سرياً</div>
+                 style="direction:ltr;text-align:left;font-family:monospace;font-size:11.5px"
+                 autocomplete="off" autocapitalize="off" spellcheck="false">
+          <div class="form-hint">من <code>@BotFather</code> — يُحفظ على هذا الجهاز ولا يُضمَّن في إعدادات Supabase. لا تستخدمه على جهاز مشترك.</div>
         </div>
 
         <!-- Chat ID + Detect -->
