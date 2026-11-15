@@ -1,0 +1,18 @@
+name: Tests
+
+on:
+  push:
+    branches: [main, 'hardening/**']
+  pull_request:
+    branches: [main]
+
+jobs:
+  unit-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Run unit tests
+        run: node --experimental-default-type=module --test tests/*.test.js
