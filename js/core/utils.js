@@ -27,7 +27,10 @@ export const CURRENCY_LABELS = {
 };
 
 // ─── أرقام وتنسيق ──────────────────────────────────────────────
-export const N2 = v => (isNaN(+v) ? 0 : +v);
+export const N2 = v => {
+  const n = Number(v);
+  return Number.isFinite(n) ? n : 0;
+};
 
 export const fmtN = (v, d = 2) => new Intl.NumberFormat('ar-EG', {
   minimumFractionDigits: d,
@@ -57,19 +60,50 @@ export const pct = (v, t) => t && N2(t) > 0 ? ((N2(v) / N2(t)) * 100).toFixed(1)
 export const pctN = (v, t) => t && N2(t) > 0 ? (N2(v) / N2(t)) * 100 : 0;
 
 // ─── تواريخ ────────────────────────────────────────────────────
-export const today = () => new Date().toISOString().slice(0, 10);
+// Use local calendar dates. toISOString() uses UTC and can return yesterday/tomorrow
+// relative to the user's local date, which can misclassify financial transactions.
+const localISODate = (date) => {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return year + '-' + month + '-' + day;
+};
+
+export const today = () => localISODate(new Date());
+
+const shiftMonthsClamped = (date, months) => {
+  const d = new Date(date);
+  const day = d.getDate();
+  d.setDate(1);
+  d.setMonth(d.getMonth() + months);
+  const lastDay = new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate();
+  d.setDate(Math.min(day, lastDay));
+  return d;
+};
+
+const shiftYearsClamped = (date, years) => {
+  const d = new Date(date);
+  const day = d.getDate();
+  const month = d.getMonth();
+  d.setDate(1);
+  d.setFullYear(d.getFullYear() + years);
+  d.setMonth(month);
+  const lastDay = new Date(d.getFullYear(), month + 1, 0).getDate();
+  d.setDate(Math.min(day, lastDay));
+  return d;
+};
 
 export const periodStart = (p) => {
   if (p === 'custom') return UI.customFrom || '2000-01-01';
   if (p === 'all') return '2000-01-01';
   const d = new Date();
-  if (p === '3m') d.setMonth(d.getMonth() - 3);
-  else if (p === '6m') d.setMonth(d.getMonth() - 6);
-  else if (p === '1y') d.setFullYear(d.getFullYear() - 1);
-  else if (p === '2y') d.setFullYear(d.getFullYear() - 2);
-  else if (p === '3y') d.setFullYear(d.getFullYear() - 3);
-  else if (p === '5y') d.setFullYear(d.getFullYear() - 5);
-  return d.toISOString().slice(0, 10);
+  if (p === '3m') return localISODate(shiftMonthsClamped(d, -3));
+  if (p === '6m') return localISODate(shiftMonthsClamped(d, -6));
+  if (p === '1y') return localISODate(shiftYearsClamped(d, -1));
+  if (p === '2y') return localISODate(shiftYearsClamped(d, -2));
+  if (p === '3y') return localISODate(shiftYearsClamped(d, -3));
+  if (p === '5y') return localISODate(shiftYearsClamped(d, -5));
+  return localISODate(d);
 };
 
 export const periodEnd = (p) => p === 'custom' ? (UI.customTo || today()) : today();
