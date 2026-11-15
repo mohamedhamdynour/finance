@@ -71,7 +71,9 @@ export async function loadAppSettings() {
       }
       conn.settingsBackend = 'supabase';
     } else {
-      await sbPost('app_settings', [{ value: APP_SETTINGS }]);
+      const initialCloudSettings = { ...APP_SETTINGS };
+      delete initialCloudSettings.goldapi_key;
+      await sbPost('app_settings', [{ value: initialCloudSettings }]);
       conn.settingsBackend = 'supabase';
     }
     normalizeCurrencies();
