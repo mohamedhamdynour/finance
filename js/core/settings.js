@@ -160,6 +160,10 @@ export async function persistAppSettings() {
         } else {
           const settingsForCloud = { ...APP_SETTINGS };
           delete settingsForCloud.goldapi_key;
+          if (settingsForCloud.telegram) {
+            settingsForCloud.telegram = { ...settingsForCloud.telegram };
+            delete settingsForCloud.telegram.bot_token;
+          }
           await sbPost('app_settings', [{ value: settingsForCloud }]);
         }
         return;
