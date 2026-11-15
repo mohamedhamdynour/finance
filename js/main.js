@@ -175,6 +175,10 @@ function finishVaultPassphrase(accepted) {
   }
   if (!accepted) {
     _vaultPassphraseResolver = null;
+    const input = document.getElementById('backup-passphrase-input');
+    const confirmInput = document.getElementById('backup-passphrase-confirm');
+    if (input) input.value = '';
+    if (confirmInput) confirmInput.value = '';
     closeModal('modal-backup-passphrase');
     resolve(null);
     return;
