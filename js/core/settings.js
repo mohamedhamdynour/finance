@@ -8,6 +8,17 @@ import { sbGet, sbPost, sbPatchBy } from './supabase.js';
 import { baseCur, currencyCodes, N2, escapeHtml } from './utils.js';
 
 // ─── تسميات العملات المعروفة ────────────────────────────────────
+// Remove provider credentials before any settings payload is sent to cloud storage.
+export function sanitizeSettingsForCloud(settings) {
+  const safe = { ...(settings || {}) };
+  delete safe.goldapi_key;
+  if (safe.telegram) {
+    safe.telegram = { ...safe.telegram };
+    delete safe.telegram.bot_token;
+  }
+  return safe;
+}
+
 export const CURRENCY_LABELS = {
   EGP: 'الجنيه المصري', SAR: 'ريال سعودي', AED: 'درهم إماراتي',
   USD: 'دولار أمريكي', EUR: 'يورو', GBP: 'جنيه إسترليني',
@@ -45,12 +56,7 @@ export async function loadAppSettings() {
         localStorage.setItem('telegram_bot_token_local', legacyTelegramToken);
       }
       if (Object.prototype.hasOwnProperty.call(rows[0].value, 'goldapi_key') || legacyTelegramToken) {
-        const safeCloudSettings = { ...rows[0].value };
-        delete safeCloudSettings.goldapi_key;
-        if (safeCloudSettings.telegram) {
-          safeCloudSettings.telegram = { ...safeCloudSettings.telegram };
-          delete safeCloudSettings.telegram.bot_token;
-        }
+        const safeCloudSettings = sanitizeSettingsForCloud(rows[0].value);
         const uid = conn.authSession?.user?.id;
         if (uid) {
           try {
@@ -86,12 +92,7 @@ export async function loadAppSettings() {
       }
       conn.settingsBackend = 'supabase';
     } else {
-      const initialCloudSettings = { ...APP_SETTINGS };
-      delete initialCloudSettings.goldapi_key;
-      if (initialCloudSettings.telegram) {
-        initialCloudSettings.telegram = { ...initialCloudSettings.telegram };
-        delete initialCloudSettings.telegram.bot_token;
-      }
+      const initialCloudSettings = sanitizeSettingsForCloud(APP_SETTINGS);
       await sbPost('app_settings', [{ value: initialCloudSettings }]);
       conn.settingsBackend = 'supabase';
     }
@@ -150,12 +151,7 @@ export async function persistAppSettings() {
       } else {
         const rows = await sbGet('app_settings', '?limit=1');
         if (rows && rows.length) {
-          const settingsForCloud = { ...APP_SETTINGS };
-          delete settingsForCloud.goldapi_key;
-          if (settingsForCloud.telegram) {
-            settingsForCloud.telegram = { ...settingsForCloud.telegram };
-            delete settingsForCloud.telegram.bot_token;
-          }
+          const settingsForCloud = sanitizeSettingsForCloud(APP_SETTINGS);
           await sbPatchBy('app_settings', 'user_id=eq.' + uid, { value: settingsForCloud });
         } else {
           const settingsForCloud = { ...APP_SETTINGS };
