@@ -6,7 +6,7 @@
 //    • عند انقطاع الشبكة → تُخدَّم الملفات الثابتة من الكاش
 // ══════════════════════════════════════════════════════════════════
 
-const CACHE_VERSION = 'v4.9.0';
+const CACHE_VERSION = 'v5.0.0';
 const CACHE_NAME = 'portfolio-' + CACHE_VERSION;
 
 const STATIC_ASSETS = [
@@ -80,6 +80,7 @@ const STATIC_ASSETS = [
   './js/core/state.js',
   './js/core/validation.js',
   './js/security/crypto.js',
+  './js/pwa/shortcut-bridge.js',
   './js/domain/telegram.js',
   './js/domain/zakat.js',
   './js/repo/banks.repo.js',
