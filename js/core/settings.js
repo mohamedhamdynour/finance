@@ -32,7 +32,25 @@ export async function loadAppSettings() {
       APP_SETTINGS.exchange_name = rows[0].value.exchange_name ?? APP_SETTINGS.exchange_name;
       APP_SETTINGS.base_currency = rows[0].value.base_currency ?? APP_SETTINGS.base_currency;
       APP_SETTINGS.currencies = rows[0].value.currencies ?? APP_SETTINGS.currencies;
-      APP_SETTINGS.goldapi_key = rows[0].value.goldapi_key ?? APP_SETTINGS.goldapi_key;
+      // API provider keys are device-local secrets; migrate any legacy cloud copy locally.
+      const localGoldApiKey = localStorage.getItem('goldapi_key_local');
+      const legacyGoldApiKey = rows[0].value.goldapi_key || '';
+      APP_SETTINGS.goldapi_key = localGoldApiKey !== null ? localGoldApiKey : legacyGoldApiKey;
+      if (localGoldApiKey === null && legacyGoldApiKey) {
+        localStorage.setItem('goldapi_key_local', legacyGoldApiKey);
+      }
+      if (Object.prototype.hasOwnProperty.call(rows[0].value, 'goldapi_key')) {
+        const safeCloudSettings = { ...rows[0].value };
+        delete safeCloudSettings.goldapi_key;
+        const uid = conn.authSession?.user?.id;
+        if (uid) {
+          try {
+            await sbPatchBy('app_settings', 'user_id=eq.' + uid, { value: safeCloudSettings });
+          } catch (e) {
+            console.warn('Could not remove legacy GoldAPI key from cloud settings:', e.message);
+          }
+        }
+      }
       if (rows[0].value.zakat) {
         APP_SETTINGS.zakat = { ...APP_SETTINGS.zakat, ...rows[0].value.zakat };
       }
@@ -68,6 +86,15 @@ export async function loadAppSettings() {
     if (raw) {
       const parsed = JSON.parse(raw);
       Object.assign(APP_SETTINGS, parsed);
+      const localGoldApiKey = localStorage.getItem('goldapi_key_local');
+      APP_SETTINGS.goldapi_key = localGoldApiKey !== null ? localGoldApiKey : (parsed.goldapi_key || '');
+      if (localGoldApiKey === null && parsed.goldapi_key) {
+        localStorage.setItem('goldapi_key_local', parsed.goldapi_key);
+      }
+      if (Object.prototype.hasOwnProperty.call(parsed, 'goldapi_key')) {
+        delete parsed.goldapi_key;
+        localStorage.setItem('appSettings', JSON.stringify(parsed));
+      }
       if (parsed.zakat) APP_SETTINGS.zakat = { ...APP_SETTINGS.zakat, ...parsed.zakat };
       if (parsed.telegram) APP_SETTINGS.telegram = { ...(APP_SETTINGS.telegram || {}), ...parsed.telegram };
     }
@@ -85,9 +112,13 @@ export async function persistAppSettings() {
       } else {
         const rows = await sbGet('app_settings', '?limit=1');
         if (rows && rows.length) {
-          await sbPatchBy('app_settings', 'user_id=eq.' + uid, { value: APP_SETTINGS });
+          const settingsForCloud = { ...APP_SETTINGS };
+          delete settingsForCloud.goldapi_key;
+          await sbPatchBy('app_settings', 'user_id=eq.' + uid, { value: settingsForCloud });
         } else {
-          await sbPost('app_settings', [{ value: APP_SETTINGS }]);
+          const settingsForCloud = { ...APP_SETTINGS };
+          delete settingsForCloud.goldapi_key;
+          await sbPost('app_settings', [{ value: settingsForCloud }]);
         }
         return;
       }
@@ -96,7 +127,12 @@ export async function persistAppSettings() {
       conn.settingsBackend = 'local';
     }
   }
-  try { localStorage.setItem('appSettings', JSON.stringify(APP_SETTINGS)); } catch (e) {}
+  try {
+    const localSettings = { ...APP_SETTINGS };
+    delete localSettings.goldapi_key;
+    localStorage.setItem('appSettings', JSON.stringify(localSettings));
+    localStorage.setItem('goldapi_key_local', APP_SETTINGS.goldapi_key || '');
+  } catch (e) {}
 }
 
 // ─── ملء قوائم العملات ──────────────────────────────────────────
@@ -180,6 +216,7 @@ export async function saveGeneralSettings() {
 export function saveGoldApiKey() {
   const key = document.getElementById('st-goldapi-key').value.trim();
   APP_SETTINGS.goldapi_key = key;
+  try { localStorage.setItem('goldapi_key_local', key); } catch (e) {}
   persistAppSettings();
   if (window.toast) window.toast(key ? 'تم حفظ المفتاح' : 'تم مسح المفتاح');
 }
