@@ -19,6 +19,7 @@ Scope: static review and targeted regression tests. This is not a full penetrati
 - Added paginated Supabase reads and used them for full application data loads and backup exports, avoiding silent truncation at the default per-response row cap.
 - Added tests for paginated reads and centralized cloud-settings sanitization so provider credentials are excluded from every cloud insert/update path.
 - Added an accessible mobile navigation drawer with an overlay, touch-sized toggle, close-on-navigation behavior, and responsive full-width content on narrow screens.
+- Added an allowlisted Apple Shortcuts URL bridge for dashboard/net-worth, liabilities, reports, add-income/expense forms, transfer form, reminders, and encrypted backup; the action query is removed before execution and no financial payload is accepted from the URL. Added a setup guide in `docs/APPLE_SHORTCUTS.md`.
 - Added Web Crypto API primitives for AES-256-GCM authenticated encryption, PBKDF2-SHA-256 key derivation, random salt/nonce generation, envelope validation, and tamper detection; added cryptographic regression tests. Manual backup export now creates encrypted files through a dedicated passphrase modal, and import supports encrypted backups plus an explicit warning before legacy plaintext import.
 - Corrected dangerous README instructions that falsely described `schema.sql` as safe to re-run.
 
@@ -83,5 +84,5 @@ The existing IndexedDB cache remains unencrypted, and cloud sync is not encrypte
 4. Run a full encrypted backup/restore drill against a disposable test account; verify all tables, attachments, and failure rollback before changing storage.
 5. Implement local encryption and a crash-safe migration behind an opt-in flow.
 6. Implement optional encrypted sync and conflict resolution.
-7. Finish iPhone PWA and Shortcut actions, then test on a real device.
+7. Test the PWA and Shortcut bridge on a real iPhone; the initial allowlisted URL bridge is implemented, but platform behavior and usability still require device validation.
 8. Open a draft PR for review; do not merge or deploy automatically.
