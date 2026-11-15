@@ -34,3 +34,8 @@ test('every tracked JavaScript module is included in the offline app shell', () 
   const missing = modules.filter(path => !cached.has(path));
   assert.deepEqual(missing, [], 'JavaScript modules omitted from STATIC_ASSETS');
 });
+
+test('service worker caches only explicitly declared same-origin app-shell assets', () => {
+  assert.match(serviceWorker, /staticAssetURLs\.has\(url\.href\)/);
+  assert.match(serviceWorker, /STATIC_ASSETS\.map\(path => new URL\(path, self\.location\.href\)\.href\)/);
+});
