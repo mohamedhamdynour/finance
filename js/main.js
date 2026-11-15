@@ -5,7 +5,7 @@
 // ─── 1) Core ────────────────────────────────────────────────────
 import { DB, UI, APP_SETTINGS, CHARTS, conn, editCtx, marketCtx } from './state.js';
 import { N2, fmt, fmtN, fmtK, pct, today, baseCur, escapeHtml, toEGP, fromEGP, toEGPRaw, getRate, periodStart, getBankColor } from './core/utils.js';
-import { sbGet, sbPost, sbPatch, sbDel, sbUpsert, sbRpc, sbPatchBy } from './core/supabase.js';
+import { sbGet, sbGetAll, sbPost, sbPatch, sbDel, sbUpsert, sbRpc, sbPatchBy } from './core/supabase.js';
 import {
   initAuthGate, connectSupabase, disconnectSupabase, doLogin, doSignup, doLogout,
   setAuthTab, setAuthSuccessHandler, isAuthenticated, getCurrentUser
@@ -569,7 +569,7 @@ async function loadAll(opts = {}) {
   try {
     const optionalTableGet = async (table, query) => {
       try {
-        return await sbGet(table, query);
+        return await sbGetAll(table, query);
       } catch (e) {
         const msg = e?.message || '';
         if (/42P01|does not exist|schema cache|Could not find/i.test(msg)) {
@@ -590,20 +590,20 @@ async function loadAll(opts = {}) {
       certs, dividends, recurring, goals, exRates, snapshots, debts, debtPayments,
       installments, installmentPayments, attachments
     ] = await Promise.all([
-      sbGet('banks', `?order=id&deleted_at=is.null${uidFilter}`),
-      sbGet('bank_transactions', `?order=date.desc,id.desc&deleted_at=is.null${uidFilter}`),
-      sbGet('stock_transactions', `?order=date.asc,id.asc&deleted_at=is.null${uidFilter}`),
-      sbGet('stock_prices', `?order=symbol${uidFilter}`),
-      sbGet('metal_transactions', `?order=date.asc,id.asc&deleted_at=is.null${uidFilter}`),
-      sbGet('metal_prices', `?order=metal_type${uidFilter}`),
-      sbGet('certificates', `?order=issued_date.asc&deleted_at=is.null`),
-      sbGet('dividends', `?order=date.desc&deleted_at=is.null`),
-      sbGet('recurring_transactions', `?order=id&deleted_at=is.null`),
-      sbGet('financial_goals', `?order=id&deleted_at=is.null`),
-      sbGet('exchange_rates', `?order=currency${uidFilter}`),
-      sbGet('portfolio_snapshots', `?order=snapshot_date.asc&limit=500`),
-      sbGet('debts', `?order=id&deleted_at=is.null`),
-      sbGet('debt_payments', `?order=date.desc&deleted_at=is.null`),
+      sbGetAll('banks', `?order=id&deleted_at=is.null${uidFilter}`),
+      sbGetAll('bank_transactions', `?order=date.desc,id.desc&deleted_at=is.null${uidFilter}`),
+      sbGetAll('stock_transactions', `?order=date.asc,id.asc&deleted_at=is.null${uidFilter}`),
+      sbGetAll('stock_prices', `?order=symbol${uidFilter}`),
+      sbGetAll('metal_transactions', `?order=date.asc,id.asc&deleted_at=is.null${uidFilter}`),
+      sbGetAll('metal_prices', `?order=metal_type${uidFilter}`),
+      sbGetAll('certificates', `?order=issued_date.asc&deleted_at=is.null`),
+      sbGetAll('dividends', `?order=date.desc&deleted_at=is.null`),
+      sbGetAll('recurring_transactions', `?order=id&deleted_at=is.null`),
+      sbGetAll('financial_goals', `?order=id&deleted_at=is.null`),
+      sbGetAll('exchange_rates', `?order=currency${uidFilter}`),
+      sbGetAll('portfolio_snapshots', `?order=snapshot_date.asc&limit=500`),
+      sbGetAll('debts', `?order=id&deleted_at=is.null`),
+      sbGetAll('debt_payments', `?order=date.desc&deleted_at=is.null`),
       optionalTableGet('installments', `?order=id&deleted_at=is.null`),
       optionalTableGet('installment_payments', `?order=date.desc&deleted_at=is.null`),
       optionalTableGet('attachments', `?order=created_at.desc&deleted_at=is.null`)
@@ -680,7 +680,7 @@ async function exportBackup() {
     const data = {};
     for (const t of tables) {
       try {
-        data[t] = await sbGet(t, tableQuery[t] || '?order=id');
+        data[t] = await sbGetAll(t, tableQuery[t] || '?order=id');
       } catch (e) {
         const msg = e?.message || '';
         if (/42P01|does not exist|schema cache|Could not find/i.test(msg)) {
