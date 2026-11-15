@@ -125,8 +125,9 @@ export async function loadAppSettings() {
         }
         delete parsed.telegram.bot_token;
       }
-      if (Object.prototype.hasOwnProperty.call(parsed, 'goldapi_key')) delete parsed.goldapi_key;
-      if (Object.prototype.hasOwnProperty.call(parsed, 'goldapi_key') || parsed.telegram) {
+      const hadLegacyGoldApiKey = Object.prototype.hasOwnProperty.call(parsed, 'goldapi_key');
+      if (hadLegacyGoldApiKey) delete parsed.goldapi_key;
+      if (hadLegacyGoldApiKey || parsed.telegram) {
         localStorage.setItem('appSettings', JSON.stringify(parsed));
       }
       if (parsed.zakat) APP_SETTINGS.zakat = { ...APP_SETTINGS.zakat, ...parsed.zakat };
