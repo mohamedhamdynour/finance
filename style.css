@@ -804,3 +804,98 @@ input, select, textarea {
     transition-duration: .01ms !important;
   }
 }
+
+
+/* Mobile navigation drawer: reclaim the narrow viewport for actual content. */
+.mobile-nav-toggle {
+  display: none;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 42px;
+  width: 42px;
+  height: 42px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface2);
+  color: var(--text);
+  cursor: pointer;
+}
+.mobile-nav-toggle svg {
+  width: 20px;
+  height: 20px;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+}
+.mobile-nav-overlay { display: none; }
+@media (max-width: 768px) {
+  .mobile-nav-toggle { display: inline-flex; }
+  .sidebar-wrap {
+    position: fixed !important;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 1201;
+    width: min(300px, 88vw);
+    height: 100dvh;
+    transform: translateX(105%);
+    visibility: hidden;
+    pointer-events: none;
+    transition: transform .22s ease, visibility .22s ease;
+  }
+  body.mobile-nav-open .sidebar-wrap {
+    transform: translateX(0);
+    visibility: visible;
+    pointer-events: auto;
+  }
+  .sidebar-wrap .sidebar {
+    width: 100% !important;
+    height: 100dvh !important;
+    max-height: 100dvh;
+    overflow-x: hidden;
+    overflow-y: auto;
+  }
+  .sidebar-wrap .sidebar .nav-text,
+  .sidebar-wrap .sidebar .logo-text,
+  .sidebar-wrap .sidebar .nav-label,
+  .sidebar-wrap .sidebar .sidebar-total,
+  .sidebar-wrap .sidebar .sidebar-btn span {
+    opacity: 1 !important;
+    width: auto !important;
+    height: auto;
+    overflow: visible !important;
+    pointer-events: auto !important;
+  }
+  .sidebar-wrap .sidebar .logo-text { display: block !important; }
+  .sidebar-wrap .sidebar .nav-label {
+    display: block !important;
+    color: #94a3b8;
+  }
+  .sidebar-wrap .sidebar .nav-badge {
+    opacity: 1 !important;
+    display: flex !important;
+    width: auto !important;
+    pointer-events: auto !important;
+  }
+  .sidebar-wrap .sidebar .sidebar-total {
+    margin: 0 0 10px !important;
+    padding: 12px 14px !important;
+  }
+  .sidebar-wrap .sidebar .sidebar-btn span { display: inline !important; }
+  .sidebar-wrap .collapse-btn { display: none !important; }
+  .mobile-nav-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 1200;
+    background: rgba(2, 6, 23, .56);
+    backdrop-filter: blur(2px);
+  }
+  body.mobile-nav-open .mobile-nav-overlay { display: block; }
+  .sidebar-wrap .sidebar .nav-item {
+    min-height: 48px;
+    padding-block: 7px;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .sidebar-wrap { transition: none !important; }
+}
