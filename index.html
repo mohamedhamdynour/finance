@@ -84,6 +84,7 @@
 </div>
 
 <div class="app hidden" id="main-app">
+<div class="mobile-nav-overlay" id="mobile-nav-overlay" onclick="toggleMobileNav(false)" aria-hidden="true"></div>
 <!-- ========== SIDEBAR ========== -->
 <div class="sidebar-wrap">
 <div class="sidebar" id="sidebar">
@@ -238,6 +239,9 @@
 <!-- ========== MAIN ========== -->
 <div class="main">
   <div class="topbar">
+    <button id="mobile-nav-toggle" class="mobile-nav-toggle" type="button" onclick="toggleMobileNav()" aria-label="فتح قائمة التنقل" aria-expanded="false" title="قائمة التنقل">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><line x1="4" y1="6" x2="20" y2="6"/><line x1="4" y1="12" x2="20" y2="12"/><line x1="4" y1="18" x2="20" y2="18"/></svg>
+    </button>
     <div>
       <div class="topbar-title" id="topbar-title">لوحة التحكم</div>
       <div class="topbar-subtitle" id="topbar-sub">نظرة شاملة على محفظتك</div>
