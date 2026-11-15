@@ -142,8 +142,13 @@ self.addEventListener('fetch', event => {
     return;
   }
 
-  // 2) نفس الأصل → cache-first مع تحديث في الخلفية
-  if (url.origin === self.location.origin) {
+  // 2) Cache only explicitly declared app-shell assets.
+  // Never cache arbitrary same-origin GET responses, which could include private data
+  // if the app is later hosted alongside API routes.
+  const staticAssetURLs = new Set(
+    STATIC_ASSETS.map(path => new URL(path, self.location.href).href)
+  );
+  if (url.origin === self.location.origin && staticAssetURLs.has(url.href)) {
     event.respondWith(
       caches.match(req).then(cached => {
         const fetchPromise = fetch(req)
