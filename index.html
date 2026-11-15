@@ -1890,6 +1890,32 @@
   </div>
 </div></div>
 
+<!-- ENCRYPTED BACKUP PASSPHRASE -->
+<div class="overlay" id="modal-backup-passphrase" onclick="if(event.target===this) finishVaultPassphrase(false)">
+  <div class="modal modal-md" role="dialog" aria-modal="true" aria-labelledby="backup-passphrase-title">
+    <div class="modal-header">
+      <div class="modal-title" id="backup-passphrase-title">تأمين النسخة الاحتياطية</div>
+      <button class="btn-icon" type="button" onclick="finishVaultPassphrase(false)" aria-label="إغلاق"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
+    </div>
+    <form onsubmit="finishVaultPassphrase(true); return false;">
+      <p id="backup-passphrase-description" class="form-hint" style="line-height:1.9;margin-bottom:14px"></p>
+      <div class="form-group">
+        <label class="form-label" for="backup-passphrase-input">عبارة المرور</label>
+        <input class="form-control" id="backup-passphrase-input" type="password" minlength="12" autocomplete="new-password" autocapitalize="off" spellcheck="false" required>
+      </div>
+      <div class="form-group" id="backup-passphrase-confirm-group">
+        <label class="form-label" for="backup-passphrase-confirm">تأكيد عبارة المرور</label>
+        <input class="form-control" id="backup-passphrase-confirm" type="password" minlength="12" autocomplete="new-password" autocapitalize="off" spellcheck="false">
+      </div>
+      <div id="backup-passphrase-error" class="auth-error" role="alert"></div>
+      <div class="modal-footer">
+        <button class="btn btn-ghost btn-sm" type="button" onclick="finishVaultPassphrase(false)">إلغاء</button>
+        <button class="btn btn-primary" type="submit">متابعة</button>
+      </div>
+    </form>
+  </div>
+</div>
+
 <!-- TOAST -->
 <div class="toast" id="toast">
   <svg id="toast-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#34d399" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
