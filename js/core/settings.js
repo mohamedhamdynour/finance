@@ -37,6 +37,15 @@ export function normalizeCurrencies() {
 
 // ─── تحميل الإعدادات ────────────────────────────────────────────
 export async function loadAppSettings() {
+  // Load device-local provider secrets even when this account has no cloud settings row yet.
+  try {
+    const localGoldApiKey = localStorage.getItem('goldapi_key_local');
+    if (localGoldApiKey !== null) APP_SETTINGS.goldapi_key = localGoldApiKey;
+    const localTelegramToken = localStorage.getItem('telegram_bot_token_local');
+    if (localTelegramToken !== null) {
+      APP_SETTINGS.telegram = { ...(APP_SETTINGS.telegram || {}), bot_token: localTelegramToken };
+    }
+  } catch (e) {}
   try {
     const rows = await sbGet('app_settings', '?limit=1');
     if (rows && rows.length && rows[0].value) {
