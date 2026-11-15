@@ -43,7 +43,18 @@ export async function loadAppSettings() {
     if (localGoldApiKey !== null) APP_SETTINGS.goldapi_key = localGoldApiKey;
     const localTelegramToken = localStorage.getItem('telegram_bot_token_local');
     if (localTelegramToken !== null) {
-      APP_SETTINGS.telegram = { ...(APP_SETTINGS.telegram || {}), bot_token: localTelegramToken };
+      APP_SETTINGS.telegram = {
+        enabled: false,
+        bot_token: '',
+        chat_id: '',
+        daily_summary: true,
+        notify_low_balance: true,
+        notify_cert_maturity: true,
+        notify_debts: true,
+        last_daily_sent: null,
+        ...(APP_SETTINGS.telegram || {}),
+        bot_token: localTelegramToken
+      };
     }
   } catch (e) {}
   try {
