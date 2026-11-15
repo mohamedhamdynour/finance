@@ -138,6 +138,20 @@ function toggleSidebar() {
   document.getElementById('sidebar')?.classList.toggle('collapsed');
 }
 
+function toggleMobileNav(force) {
+  const shouldOpen = typeof force === 'boolean'
+    ? force
+    : !document.body.classList.contains('mobile-nav-open');
+  document.body.classList.toggle('mobile-nav-open', shouldOpen);
+  const overlay = document.getElementById('mobile-nav-overlay');
+  if (overlay) overlay.setAttribute('aria-hidden', String(!shouldOpen));
+  const button = document.getElementById('mobile-nav-toggle');
+  if (button) {
+    button.setAttribute('aria-expanded', String(shouldOpen));
+    button.setAttribute('aria-label', shouldOpen ? 'إغلاق قائمة التنقل' : 'فتح قائمة التنقل');
+  }
+}
+
 const PAGE_TITLES = {
   dashboard:     ['لوحة التحكم',        'نظرة شاملة على محفظتك'],
   banks:         ['الحسابات البنكية',   'إدارة أرصدتك وحركاتك'],
@@ -167,6 +181,7 @@ function nav(page) {
   document.getElementById('page-' + page)?.classList.add('active');
   document.querySelector(`.nav-item[data-page="${page}"]`)?.classList.add('active');
   UI.activePage = page;
+  if (document.body.classList.contains('mobile-nav-open')) toggleMobileNav(false);
   const titles = PAGE_TITLES[page] || [page, ''];
   document.getElementById('topbar-title').textContent = titles[0];
   document.getElementById('topbar-sub').textContent = titles[1];
@@ -838,7 +853,7 @@ function installOcrHandler() {
 function exposeGlobals() {
   // Core
   Object.assign(window, {
-    loadAll, renderPage, nav, toggleSidebar, toast,
+    loadAll, renderPage, nav, toggleSidebar, toggleMobileNav, toast,
     toggleDark, setPeriodFromSelect, applyGlobalCustomRange,
     toggleNotifications, openModal, closeModal,
     initAuthGate, connectSupabase, disconnectSupabase,
