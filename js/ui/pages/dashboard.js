@@ -5,7 +5,7 @@
 import { DB, UI } from '../../state.js';
 import {
   N2, fmt, fmtN, pct, periodStart, sign, cls, escapeHtml,
-  MARKET_NAMES, getBankColor, baseCur, fromEGP
+  MARKET_NAMES, getBankColor, baseCur, fromEGP, getMissingExchangeRates
 } from '../../core/utils.js';
 import { toast } from '../toast.js';
 import { kpi, svgIcon, typeTag, getCertAlerts } from '../shared.js';
@@ -53,6 +53,16 @@ export function renderDashboard() {
       <div class="alert-content">
         <div class="alert-title">شهادات تستحق خلال 30 يوم (${soon.length})</div>
         <div class="alert-body">${soon.map(c => escapeHtml(c.name) + ' — ' + c.daysLeft + ' يوم').join(' · ')}</div>
+      </div>
+    </div>`;
+  }
+  const missingRates = getMissingExchangeRates();
+  if (missingRates.length) {
+    alertsHtml += `<div class="alert alert-warn" role="alert">
+      <div class="alert-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg></div>
+      <div class="alert-content">
+        <div class="alert-title">أسعار صرف ناقصة أو غير صالحة</div>
+        <div class="alert-body">العملات: ${missingRates.map(escapeHtml).join('، ')}. قد تكون إجماليات المحفظة المعروضة بعملة الأساس غير دقيقة. حدّث أسعار الصرف من الإعدادات قبل الاعتماد على الإجماليات.</div>
       </div>
     </div>`;
   }
