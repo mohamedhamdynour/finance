@@ -601,7 +601,7 @@ async function loadAll(opts = {}) {
       sbGet('recurring_transactions', `?order=id&deleted_at=is.null`),
       sbGet('financial_goals', `?order=id&deleted_at=is.null`),
       sbGet('exchange_rates', `?order=currency${uidFilter}`),
-      sbGet('portfolio_snapshots', `?order=snapshot_date.asc&limit=500`),
+      sbGet('portfolio_snapshots', `?order=snapshot_date.asc`),
       sbGet('debts', `?order=id&deleted_at=is.null`),
       sbGet('debt_payments', `?order=date.desc&deleted_at=is.null`),
       optionalTableGet('installments', `?order=id&deleted_at=is.null`),
