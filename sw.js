@@ -6,7 +6,7 @@
 //    • عند انقطاع الشبكة → تُخدَّم الملفات الثابتة من الكاش
 // ══════════════════════════════════════════════════════════════════
 
-const CACHE_VERSION = 'v4.5.0';
+const CACHE_VERSION = 'v4.6.0';
 const CACHE_NAME = 'portfolio-' + CACHE_VERSION;
 
 const STATIC_ASSETS = [
@@ -17,6 +17,24 @@ const STATIC_ASSETS = [
   './icon.svg',
   './icon-maskable.svg',
   './schema.sql',
+  './vendor/supabase-js-2.118.0.umd.js',
+  './apple-touch-icon.png',
+  './icon-192.png',
+  './icon-512.png',
+  './js/lib/a11y.js',
+  './js/lib/performance.js',
+  './js/core/validation.js',
+  './js/core/errors.js',
+  './js/domain/telegram.js',
+  './js/ui/router.js',
+  './js/ui/modal.js',
+  './js/ui/telegram-setup.js',
+  './js/repo/index.js',
+  './js/repo/banks.repo.js',
+  './js/repo/certs.repo.js',
+  './js/repo/debts.repo.js',
+  './js/repo/metals.repo.js',
+  './js/repo/stocks.repo.js',
   './js/main.js',
   './js/state.js',
   './js/core/utils.js',
