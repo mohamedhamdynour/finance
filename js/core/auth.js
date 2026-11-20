@@ -5,7 +5,6 @@
 import { conn } from '../state.js';
 import { friendlyError } from './errors.js';
 import { initFromStorage, connect, disconnect } from './supabase.js';
-import { clearCache } from './cache.js';
 
 // ─── callback يُسجِّله main.js ليُشغّل loadAll بعد نجاح الدخول ──
 let _onAuthSuccess = null;
@@ -120,8 +119,6 @@ export async function doLogin() {
 export async function doLogout() {
   if (!confirm('تسجيل الخروج؟')) return;
   try { if (conn.supabaseClient) await conn.supabaseClient.auth.signOut(); } catch (e) {}
-  try { await clearCache(); } catch (e) {}
-  localStorage.removeItem('viewingContextUid');
   conn.authSession = null;
   location.reload();
 }
@@ -153,7 +150,7 @@ export async function initAuthGate() {
   document.getElementById('conn-key').value = conn.SB_KEY;
 
   try {
-    conn.supabaseClient = window.supabase.createClient(conn.SB_URL, conn.SB_KEY);
+    conn.supabaseClient = window.supabase.createClient(conn.SB_URL, conn.SB_KEY, { auth: { persistSession: false, autoRefreshToken: true, detectSessionInUrl: false } });
     const { data } = await conn.supabaseClient.auth.getSession();
     if (data?.session) {
       conn.authSession = data.session;

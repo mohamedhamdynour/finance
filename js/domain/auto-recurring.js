@@ -8,7 +8,6 @@ import { sbPost, sbPatch } from '../core/supabase.js';
 import { nextRecDate } from './calc.js';
 import { toast } from '../ui/toast.js';
 
-const LAST_RUN_KEY = 'autoRecurringLastRun';
 const reload = () => window.loadAll?.({ silent: true });
 
 /**
@@ -19,11 +18,6 @@ const reload = () => window.loadAll?.({ silent: true });
 export async function autoApplyRecurring(force = false) {
   // تحقق هل نُفّذت اليوم
   const todayStr = today();
-  const lastRun = localStorage.getItem(LAST_RUN_KEY);
-  if (!force && lastRun === todayStr) {
-    return { applied: 0, failed: [], skipped: true };
-  }
-
   // فقط للمستخدم المسجّل
   const uid = conn.authSession?.user?.id;
   if (!uid) return { applied: 0, failed: [], skipped: true };
@@ -39,7 +33,6 @@ export async function autoApplyRecurring(force = false) {
   });
 
   if (!due.length) {
-    localStorage.setItem(LAST_RUN_KEY, todayStr);
     return { applied: 0, failed: [], skipped: false };
   }
 
@@ -57,7 +50,6 @@ export async function autoApplyRecurring(force = false) {
   }
 
   // سجّل التشغيل
-  localStorage.setItem(LAST_RUN_KEY, todayStr);
 
   // أعد تحميل البيانات (silent) إذا نجح شيء
   if (applied > 0) await reload();

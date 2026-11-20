@@ -170,7 +170,7 @@ function pendingRow(m) {
 }
 
 function sharedWithMeRow(m) {
-  const isActive = isViewingShared() && localStorage.getItem('viewingContextUid') === m.owner_user_id;
+  const isActive = isViewingShared() && conn.viewingUserId === m.owner_user_id;
   const roleLabel = m.role === 'editor' ? 'تعديل كامل' : 'مشاهدة فقط';
 
   return `
@@ -276,7 +276,7 @@ export async function updateSharedBanner() {
     return;
   }
 
-  const ctxUid = localStorage.getItem('viewingContextUid');
+  const ctxUid = conn.viewingUserId;
   const info = await getOwnerInfo(ctxUid);
   const roleLabel = info?.role === 'editor' ? 'تعديل كامل' : 'مشاهدة فقط';
 

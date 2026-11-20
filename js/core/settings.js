@@ -33,6 +33,9 @@ export async function loadAppSettings() {
       APP_SETTINGS.base_currency = rows[0].value.base_currency ?? APP_SETTINGS.base_currency;
       APP_SETTINGS.currencies = rows[0].value.currencies ?? APP_SETTINGS.currencies;
       APP_SETTINGS.goldapi_key = rows[0].value.goldapi_key ?? APP_SETTINGS.goldapi_key;
+      if (rows[0].value.ui) {
+        APP_SETTINGS.ui = { ...APP_SETTINGS.ui, ...rows[0].value.ui };
+      }
       if (rows[0].value.zakat) {
         APP_SETTINGS.zakat = { ...APP_SETTINGS.zakat, ...rows[0].value.zakat };
       }
@@ -59,20 +62,10 @@ export async function loadAppSettings() {
     normalizeCurrencies();
     return;
   } catch (e) {
-    // الجدول غير موجود → fallback إلى localStorage
+    console.warn('تعذر تحميل إعدادات التطبيق من Supabase:', e.message);
+    conn.settingsBackend = 'unavailable';
+    normalizeCurrencies();
   }
-
-  conn.settingsBackend = 'local';
-  try {
-    const raw = localStorage.getItem('appSettings');
-    if (raw) {
-      const parsed = JSON.parse(raw);
-      Object.assign(APP_SETTINGS, parsed);
-      if (parsed.zakat) APP_SETTINGS.zakat = { ...APP_SETTINGS.zakat, ...parsed.zakat };
-      if (parsed.telegram) APP_SETTINGS.telegram = { ...(APP_SETTINGS.telegram || {}), ...parsed.telegram };
-    }
-  } catch (e) {}
-  normalizeCurrencies();
 }
 
 // ─── حفظ الإعدادات ──────────────────────────────────────────────
@@ -81,7 +74,7 @@ export async function persistAppSettings() {
     try {
       const uid = conn.authSession?.user?.id;
       if (!uid) {
-        conn.settingsBackend = 'local';
+        conn.settingsBackend = 'unavailable';
       } else {
         const rows = await sbGet('app_settings', '?limit=1');
         if (rows && rows.length) {
@@ -92,11 +85,12 @@ export async function persistAppSettings() {
         return;
       }
     } catch (e) {
-      console.warn('persistAppSettings failed, falling back to local:', e.message);
-      conn.settingsBackend = 'local';
+      console.warn('persistAppSettings failed:', e.message);
+      conn.settingsBackend = 'unavailable';
+      throw e;
     }
   }
-  try { localStorage.setItem('appSettings', JSON.stringify(APP_SETTINGS)); } catch (e) {}
+  if (conn.settingsBackend !== 'supabase') throw new Error('لا يمكن حفظ الإعدادات بدون اتصال بقاعدة البيانات');
 }
 
 // ─── ملء قوائم العملات ──────────────────────────────────────────
@@ -253,26 +247,13 @@ export function renderSettings() {
   if (modeEl) {
     modeEl.innerHTML = conn.settingsBackend === 'supabase'
       ? '<span style="color:var(--green)">✓ الإعدادات متزامنة عبر قاعدة البيانات على كل أجهزتك</span>'
-      : '<span style="color:var(--gold)">⚠ الإعدادات محفوظة على هذا الجهاز فقط.</span>';
+      : '<span style="color:var(--red)">⚠ لا يوجد اتصال بقاعدة البيانات — لن يتم حفظ الإعدادات محليًا.</span>';
   }
 
-  // ── 4) حالة الكاش ──
+  // ── 4) حالة التخزين ──
   const cacheInfoEl = document.getElementById('st-cache-info');
-  if (cacheInfoEl && typeof window.cacheInfo === 'function') {
-    window.cacheInfo().then(info => {
-      if (!info) {
-        cacheInfoEl.innerHTML = '<span style="color:var(--muted)">لا يوجد كاش محفوظ بعد.</span>';
-        return;
-      }
-      const ageMin = info.age.toFixed(1);
-      const sizeKB = (info.size / 1024).toFixed(1);
-      cacheInfoEl.innerHTML = `
-        <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;font-size:12px">
-          <span style="color:var(--muted)">عمر الكاش: <strong>${ageMin} دقيقة</strong> • الحجم: <strong>${sizeKB} KB</strong></span>
-          <button onclick="window.clearCache().then(()=>location.reload())" style="background:var(--red-l);color:var(--red-d);border:none;padding:5px 12px;border-radius:6px;cursor:pointer;font-size:11px;font-family:inherit;font-weight:700">مسح</button>
-        </div>`;
-    });
-  }
+  if (cacheInfoEl) cacheInfoEl.innerHTML = '<span style="color:var(--green)">✓ لا يتم حفظ بيانات التطبيق على المتصفح.</span>';
+
 
   // ── 5) كارت Telegram ──
   const tgSection = document.getElementById('st-telegram-section');

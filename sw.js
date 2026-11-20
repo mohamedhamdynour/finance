@@ -6,7 +6,7 @@
 //    • عند انقطاع الشبكة → تُخدَّم الملفات الثابتة من الكاش
 // ══════════════════════════════════════════════════════════════════
 
-const CACHE_VERSION = 'v4.6.0';
+const CACHE_VERSION = 'v4.7.0-database-only';
 const CACHE_NAME = 'portfolio-' + CACHE_VERSION;
 
 const STATIC_ASSETS = [
@@ -139,29 +139,39 @@ self.addEventListener('fetch', event => {
     'cdnjs.cloudflare.com',
     'unpkg.com',
     'fonts.googleapis.com',
-    'fonts.gstatic.com'
+    'fonts.gstatic.com',
+    'query1.finance.yahoo.com'
   ];
   if (externalHosts.some(h => url.hostname.includes(h))) {
     // اسمح للشبكة تتعامل معه بشكل طبيعي
     return;
   }
 
-  // 2) نفس الأصل → cache-first مع تحديث في الخلفية
+  // 2) نفس الأصل: الشبكة أولًا لملفات التطبيق حتى يبدأ المستخدم بالتحديثات فورًا
   if (url.origin === self.location.origin) {
+    const isAppShell = req.mode === 'navigate' || /\.(html|css|js)$/i.test(url.pathname);
+    if (isAppShell) {
+      event.respondWith(
+        fetch(req).then(res => {
+          if (res && res.status === 200 && res.type === 'basic') {
+            const clone = res.clone();
+            caches.open(CACHE_NAME).then(c => c.put(req, clone));
+          }
+          return res;
+        }).catch(() => caches.match(req).then(cached => cached || caches.match('./index.html')))
+      );
+      return;
+    }
+
+    // الأصول غير الحرجة: cache-first مع تحديث محدود
     event.respondWith(
       caches.match(req).then(cached => {
-        const fetchPromise = fetch(req)
-          .then(res => {
-            // خزّن نسخة محدّثة (فقط لو الاستجابة صالحة)
-            if (res && res.status === 200 && res.type === 'basic') {
-              const clone = res.clone();
-              caches.open(CACHE_NAME).then(c => c.put(req, clone));
-            }
-            return res;
-          })
-          .catch(() => cached);
-
-        // أعطِ المستخدم النسخة المخزّنة فورًا لو موجودة
+        const fetchPromise = fetch(req).then(res => {
+          if (res && res.status === 200 && res.type === 'basic') {
+            caches.open(CACHE_NAME).then(c => c.put(req, res.clone()));
+          }
+          return res;
+        }).catch(() => cached);
         return cached || fetchPromise;
       })
     );

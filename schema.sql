@@ -274,6 +274,7 @@ create table stock_prices (
   user_id       uuid not null default auth.uid() references auth.users(id) on delete cascade,
   name          text,
   sec_type      text,
+  market        text default 'EGX',
   current_price numeric(18,4) not null default 0 check (current_price >= 0),
   updated_at    timestamptz not null default now(),
   primary key (symbol, user_id)

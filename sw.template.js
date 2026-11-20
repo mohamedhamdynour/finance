@@ -1,7 +1,7 @@
 /* sw.template.js — Service Worker بنسخة (versioned) + تحديث آمن.
  * ⚠️ لم أرَ sw.js الحالي عندك. قارن قبل الاستبدال، وعدّل PRECACHE بأسماء ملفاتك الفعلية (مثلاً ملفات js/).
  * كل ما تعدّل أي ملف ثابت، غيّر VERSION. */
-const VERSION = 'v2026-11-18-1';
+const VERSION = 'v2026-11-20-database-only';
 const CACHE = 'portfolio-' + VERSION;
 const PRECACHE = [
   './', 'index.html', 'style.css', 'manifest.json', 'icon.svg', 'icon-maskable.svg',

@@ -1,7 +1,8 @@
 // ══════════════════════════════════════════════════════════════════
 //  shared.js — دوال UI المشتركة
 // ══════════════════════════════════════════════════════════════════
-import { DB, UI, CHARTS, marketCtx } from '../state.js';
+import { DB, UI, CHARTS, marketCtx, APP_SETTINGS } from '../state.js';
+import { persistAppSettings } from '../core/settings.js';
 import { N2, fmt, fmtN, pct, periodStart, periodEnd, getBankColor, escapeHtml } from '../core/utils.js';
 
 // ─── KPI Card ──────────────────────────────────────────────────
@@ -173,7 +174,8 @@ export function getReportPeriodBounds() {
 // ─── اختيار الفترة العامة ───────────────────────────────────
 export function setPeriodFromSelect(p) {
   UI.globalPeriod = p;
-  localStorage.setItem('globalPeriod', p);
+  APP_SETTINGS.ui.period = p;
+  persistAppSettings().catch(e => console.warn('[ui] تعذر حفظ الفترة:', e.message));
   const customEl = document.getElementById('global-custom-range');
   if (customEl) customEl.classList.toggle('hidden', p !== 'custom');
   if (p !== 'custom' && typeof window.renderPage === 'function') window.renderPage();

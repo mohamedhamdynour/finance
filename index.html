@@ -15,9 +15,6 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="محفظتي">
 <meta name="mobile-web-app-capable" content="yes">
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
 <script src="vendor/supabase-js-2.118.0.umd.js" integrity="sha384-TcHRA3zBbn+Lexh5n+Oil4guNPOS3rjNDpGRAN46u/s/mB2IZ50ceC6TYDU2yvgK" crossorigin="anonymous"></script>
 <link rel="stylesheet" href="style.css">
 </head>
@@ -62,12 +59,12 @@
         <button id="auth-tab-login" class="active" onclick="setAuthTab('login')">تسجيل الدخول</button>
         <button id="auth-tab-signup" onclick="setAuthTab('signup')">حساب جديد</button>
       </div>
-      <div id="auth-form-login">
+      <form id="auth-form-login" onsubmit="return false">
         <input id="login-email" type="email" placeholder="البريد الإلكتروني" autocomplete="username">
         <input id="login-password" type="password" placeholder="كلمة المرور" autocomplete="current-password">
-        <button class="auth-submit" onclick="doLogin()">دخول</button>
-      </div>
-      <div id="auth-form-signup" class="hidden">
+        <button class="auth-submit" onclick="doLogin()" type="button">دخول</button>
+      </form>
+      <form id="auth-form-signup" class="hidden" onsubmit="return false">
         <input id="signup-username" placeholder="اسم المستخدم" autocomplete="off">
         <input id="signup-email" type="email" placeholder="البريد الإلكتروني" autocomplete="username">
         <input id="signup-password" type="password" placeholder="كلمة المرور (6 أحرف على الأقل)" autocomplete="new-password">
@@ -312,6 +309,17 @@
      PAGE: DASHBOARD
 ══════════════════════════════════════════════ -->
 <div id="page-dashboard" class="page active">
+  <section class="dashboard-hero">
+    <div>
+      <span class="hero-eyebrow">Portfolio Intelligence</span>
+      <h2>قراراتك المالية، أوضح وأسرع.</h2>
+      <p>ملخص حي لمحفظتك مع مزامنة كاملة من قاعدة البيانات وتحديثات سوق متأخرة.</p>
+    </div>
+    <div class="hero-actions">
+      <button class="btn btn-primary" onclick="nav('prices');autoFetchStockPrices(true)">تحديث السوق</button>
+      <button class="btn btn-outline" onclick="nav('reports')">فتح التقارير</button>
+    </div>
+  </section>
   <div id="dash-alerts"></div>
   <div class="kpi-grid" id="dash-kpis"></div>
 
@@ -746,6 +754,9 @@
       </div>
       <div class="card-body">
         <div id="stock-prices-list"></div>
+        <button class="btn btn-outline btn-sm" onclick="autoFetchStockPrices(true)" style="margin-top:10px;width:100%">
+          تحديث متأخر من السوق (كل 12 ساعة)
+        </button>
         <button class="btn btn-primary btn-sm" onclick="saveStockPrices()" style="margin-top:10px;width:100%">
           <svg viewBox="0 0 24 24"><path d="M19 21H5a2 2 0 01-2-2V5a2 2 0 012-2h11l5 5v11a2 2 0 01-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
           حفظ الأسعار

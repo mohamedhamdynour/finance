@@ -16,7 +16,6 @@ import {
   addSettingsCurrency, renameSettingsCurrency, removeSettingsCurrency,
   saveGeneralSettings, saveGoldApiKey, populateMetalTypeSelect, onMetalTypeChange
 } from './core/settings.js';
-import { saveCache, loadCache, applyCacheToDB, clearCache, cacheInfo } from './core/cache.js';
 import { isOnline, onNetworkChange } from './core/network.js';
 import { trySendDailySummary, sendUrgentAlerts } from './domain/telegram.js';
 import { installTelegramHandlers } from './ui/telegram-setup.js';
@@ -102,8 +101,9 @@ const svg = (path, size = 16, extra = '') =>
 function toggleDark() {
   document.body.classList.toggle('dark');
   const dk = document.body.classList.contains('dark');
+  APP_SETTINGS.ui.theme = dk ? 'dark' : 'light';
+  persistAppSettings().catch(e => console.warn('[ui] تعذر حفظ المظهر:', e.message));
   document.querySelectorAll('select,input').forEach(s => s.style.colorScheme = dk ? 'dark' : 'light');
-  localStorage.setItem('darkMode', dk ? '1' : '0');
   const iconPath = dk ? ICON.sun : ICON.moon;
   ['dark-icon', 'topbar-dark-icon'].forEach(id => {
     const el = document.getElementById(id);
@@ -115,27 +115,30 @@ function toggleDark() {
 }
 
 function initDarkMode() {
-  if (localStorage.getItem('darkMode') === '1') {
-    document.body.classList.add('dark');
-    document.querySelectorAll('select,input').forEach(s => s.style.colorScheme = 'dark');
-    ['dark-icon', 'topbar-dark-icon'].forEach(id => {
-      const el = document.getElementById(id);
-      if (el) el.innerHTML = ICON.sun;
-    });
-    const dt = document.getElementById('dark-text');
-    if (dt) dt.textContent = 'نهاري';
-  }
-  const savedPeriod = localStorage.getItem('globalPeriod') || '1y';
-  UI.globalPeriod = savedPeriod;
+  const dark = APP_SETTINGS.ui?.theme === 'dark';
+  document.body.classList.toggle('dark', dark);
+  document.querySelectorAll('select,input').forEach(s => s.style.colorScheme = dark ? 'dark' : 'light');
+  ['dark-icon', 'topbar-dark-icon'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.innerHTML = dark ? ICON.sun : ICON.moon;
+  });
+  const dt = document.getElementById('dark-text');
+  if (dt) dt.textContent = dark ? 'نهاري' : 'ليلي';
+  UI.globalPeriod = APP_SETTINGS.ui?.period || '1y';
   const ps = document.getElementById('global-period-select');
-  if (ps) ps.value = savedPeriod;
+  if (ps) ps.value = UI.globalPeriod;
+  const sidebar = document.getElementById('sidebar');
+  sidebar?.classList.toggle('collapsed', APP_SETTINGS.ui?.sidebarCollapsed === true);
 }
 
 // ══════════════════════════════════════════════════════════════════
 //  Sidebar + Navigation
 // ══════════════════════════════════════════════════════════════════
 function toggleSidebar() {
-  document.getElementById('sidebar')?.classList.toggle('collapsed');
+  const sidebar = document.getElementById('sidebar');
+  sidebar?.classList.toggle('collapsed');
+  APP_SETTINGS.ui.sidebarCollapsed = sidebar?.classList.contains('collapsed') || false;
+  persistAppSettings().catch(e => console.warn('[ui] تعذر حفظ الشريط الجانبي:', e.message));
 }
 
 const PAGE_TITLES = {
@@ -544,27 +547,7 @@ async function loadAll(opts = {}) {
   const ctxUid = getContextUserId();
   const uidFilter = ctxUid ? `&user_id=eq.${ctxUid}` : '';
   const silent = opts.silent === true;
-  const useCache = opts.useCache !== false;
-
-  if (useCache) {
-    const cache = await loadCache();
-    if (cache) {
-      applyCacheToDB(cache.data);
-      try {
-        renderPage();
-        updateNotificationBell();
-        const t = calcTotals();
-        const st = document.getElementById('sidebar-total');
-        if (st) st.textContent = fmt(t.grand);
-        const se = document.getElementById('sidebar-sync');
-        if (se) se.innerHTML = '<span class="sync-dot"></span> تحديث...';
-      } catch (e) { console.warn('[loadAll] cache render failed:', e.message); }
-    } else if (!silent) {
-      showAllSkeletons();
-    }
-  } else if (!silent) {
-    showAllSkeletons();
-  }
+  if (!silent) showAllSkeletons();
 
   try {
     const optionalTableGet = async (table, query) => {
@@ -583,7 +566,7 @@ async function loadAll(opts = {}) {
     };
 
     const syncEl = document.getElementById('sidebar-sync');
-    if (syncEl && !useCache) syncEl.innerHTML = '<span class="sync-dot"></span> جاري التحميل...';
+    if (syncEl) syncEl.innerHTML = '<span class="sync-dot"></span> جاري التحميل...';
 
     const [
       banks, bankTxns, stockTxns, stockPrices, metalTxns, metalPrices,
@@ -623,7 +606,6 @@ async function loadAll(opts = {}) {
     else if (UI.activeBankId && UI.activeBankId !== 'ALL' && !validBankIds.has(+UI.activeBankId) && banks.length)
       UI.activeBankId = banks[0].id;
 
-    saveCache();
     await saveSnapshot();
     updateBadges();
     renderPage();
@@ -732,6 +714,7 @@ async function importBackup(input) {
 // ══════════════════════════════════════════════════════════════════
 async function onAuthSuccess() {
   await loadAppSettings();
+  initDarkMode();
   populateAllCurrencySelects();
   updateCurrencyLabels();
 
@@ -770,6 +753,7 @@ async function onAuthSuccess() {
   ensureChartLoaded();
   pricesPage.autoFetchExchangeRates(false);
   pricesPage.autoFetchMetalPrices(false);
+  pricesPage.autoFetchStockPrices(false);
 
     // Telegram — الملخص اليومي + التنبيهات الطارئة
   setTimeout(async () => {
@@ -995,6 +979,7 @@ function exposeGlobals() {
     saveExchangeRate: pricesPage.saveExchangeRate,
     autoFetchExchangeRates: pricesPage.autoFetchExchangeRates,
     autoFetchMetalPrices: pricesPage.autoFetchMetalPrices,
+    autoFetchStockPrices: pricesPage.autoFetchStockPrices,
     removeOrphanStock: pricesPage.removeOrphanStock,
     saveGoldApiKey
   });
@@ -1044,9 +1029,6 @@ function exposeGlobals() {
     exportBackup,
     importBackup,
     saveEdit,
-    clearCache,
-    cacheInfo,
-    saveCache,
     openCSVImport
   });
 
@@ -1099,9 +1081,19 @@ taxPage.installTaxHandlers();
 setAuthSuccessHandler(onAuthSuccess);
 initAuthGate();
 
-if ('serviceWorker' in navigator && !navigator.serviceWorker.controller) {
+if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
-    navigator.serviceWorker.register('sw.js', { scope: './' }).catch(() => {});
+    navigator.serviceWorker.register('sw.js', { scope: './' }).then(registration => {
+      registration.update().catch(() => {});
+      registration.addEventListener('updatefound', () => {
+        const worker = registration.installing;
+        worker?.addEventListener('statechange', () => {
+          if (worker.state === 'activated' && navigator.serviceWorker.controller) {
+            window.location.reload();
+          }
+        });
+      });
+    }).catch(() => {});
   });
 }
 

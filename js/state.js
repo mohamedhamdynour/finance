@@ -40,10 +40,15 @@ export const UI = {
 // ─── مراجع الرسوم البيانية ─────────────────────────────────────
 export const CHARTS = {};
 
-// ─── إعدادات التطبيق (يُحمَّل من قاعدة البيانات أو localStorage) ──
+// ─── إعدادات التطبيق (تُحمَّل من قاعدة البيانات فقط) ──
 export const APP_SETTINGS = {
   exchange_name: '',
   base_currency: 'EGP',       // ← يمكن تغييرها من الإعدادات
+  ui: {
+    theme: 'light',
+    period: '1y',
+    sidebarCollapsed: false
+  },
   currencies: [
     { code: 'EGP', name: 'الجنيه المصري' },
     { code: 'USD', name: 'دولار أمريكي' },

@@ -52,9 +52,10 @@ export function renderPrices() {
     (orphanTypes.length ? `<details style="margin-top:10px"><summary style="cursor:pointer;font-size:11px;color:var(--muted);font-weight:700;padding:6px 0">أسعار قديمة (${orphanTypes.length})</summary>${orphanTypes.map(t => metalRowHtml(t, false)).join('')}</details>` : '');
 
   const currencies = [...new Set(DB.banks.map(b => b.currency || 'EGP').filter(c => c !== 'EGP'))];
-  const lastFx = localStorage.getItem('lastFxFetchDate');
+  const lastFxRow = [...DB.exchangeRates].sort((a, b) => new Date(b.updated_at || 0) - new Date(a.updated_at || 0))[0];
+  const lastFx = lastFxRow?.updated_at ? new Date(lastFxRow.updated_at).toLocaleString('ar-EG') : null;
   const fxStatus = `<div style="display:flex;justify-content:space-between;flex-wrap:wrap;gap:8px;padding:10px 2px;margin-bottom:6px;border-bottom:.5px solid var(--border)">
-    <div style="font-size:11px;color:var(--muted)">${lastFx === today() ? '✓ تم التحديث اليوم' : lastFx ? 'آخر تحديث: ' + lastFx : 'لم يتم التحديث'}</div>
+    <div style="font-size:11px;color:var(--muted)">${lastFx ? 'آخر تحديث من قاعدة البيانات: ' + lastFx : 'لم يتم التحديث'}</div>
     <button class="btn btn-xs btn-teal" onclick="autoFetchExchangeRates(true)" id="fx-fetch-btn">جلب الأسعار</button>
   </div>`;
   document.getElementById('exchange-rates-list').innerHTML = currencies.length
@@ -108,7 +109,8 @@ export async function autoFetchExchangeRates(manual = false) {
   const currencies = [...new Set(DB.banks.map(b => b.currency || 'EGP').filter(c => c !== 'EGP'))];
   if (!currencies.length) { if (manual) alert('لا توجد عملات أجنبية'); return; }
   const todayStr = today();
-  if (!manual && localStorage.getItem('lastFxFetchDate') === todayStr) return;
+  const newestFx = Math.max(0, ...DB.exchangeRates.map(r => new Date(r.updated_at || 0).getTime()));
+  if (!manual && newestFx && Date.now() - newestFx < 12 * 60 * 60 * 1000) return;
   const btn = document.getElementById('fx-fetch-btn');
   if (btn) btn.disabled = true;
   let updated = 0, failed = [];
@@ -124,14 +126,45 @@ export async function autoFetchExchangeRates(manual = false) {
       } else failed.push(cur);
     } catch (e) { failed.push(cur); }
   }
-  if (updated > 0) {
-    localStorage.setItem('lastFxFetchDate', todayStr);
-    localStorage.setItem('lastFxFetchAt', new Date().toISOString());
-    localStorage.setItem('lastFxSource', 'open.er-api.com');
-  }
+
   if (btn) btn.disabled = false;
   if (updated > 0) { toast(`تم تحديث ${updated} عملة`); await reload(); }
   else if (manual) alert('تعذّر الجلب');
+}
+
+
+
+const yahooSymbol = (symbol, market) => {
+  const clean = String(symbol || '').trim().toUpperCase();
+  if (!clean) return '';
+  if (market === 'EGX' && !clean.endsWith('.CA')) return clean + '.CA';
+  return clean;
+};
+
+export async function autoFetchStockPrices(manual = false) {
+  const holdings = getHoldings();
+  const symbols = Object.keys(holdings);
+  if (!symbols.length) { if (manual) alert('لا توجد أسهم مملوكة'); return; }
+  const newest = Math.max(0, ...DB.stockPrices.map(p => new Date(p.updated_at || 0).getTime()));
+  if (!manual && newest && Date.now() - newest < 12 * 60 * 60 * 1000) return;
+  let updated = 0;
+  for (const symbol of symbols) {
+    const holding = holdings[symbol];
+    const saved = DB.stockPrices.find(p => p.symbol === symbol);
+    try {
+      const query = encodeURIComponent(yahooSymbol(symbol, saved?.market || holding?.market || 'EGX'));
+      const response = await fetch(`https://query1.finance.yahoo.com/v8/finance/chart/${query}?range=5d&interval=1d`);
+      if (!response.ok) continue;
+      const data = await response.json();
+      const meta = data?.chart?.result?.[0]?.meta;
+      const price = Number(meta?.regularMarketPrice || meta?.previousClose || 0);
+      if (!price) continue;
+      await sbUpsert('stock_prices', { symbol, name: saved?.name || holding?.name || symbol, sec_type: saved?.sec_type || holding?.type || 'سهم', market: saved?.market || holding?.market || 'EGX', current_price: price });
+      updated++;
+    } catch (e) { console.warn(`[prices] تعذر تحديث ${symbol}:`, e.message); }
+  }
+  if (updated) { toast(`تم تحديث ${updated} سعر سهم من مصدر متأخر`); await reload(); }
+  else if (manual) alert('تعذر جلب أسعار الأسهم حاليًا');
 }
 
 export function saveGoldApiKey() {
@@ -160,7 +193,8 @@ export async function autoFetchMetalPrices(manual = false) {
   const apiKey = APP_SETTINGS.goldapi_key;
   if (!apiKey) { if (manual) alert('أدخل مفتاح GoldAPI.io'); return; }
   const todayStr = today();
-  if (!manual && localStorage.getItem('lastMetalFetchDate') === todayStr) return;
+  const newestMetal = Math.max(0, ...DB.metalPrices.map(r => new Date(r.updated_at || 0).getTime()));
+  if (!manual && newestMetal && Date.now() - newestMetal < 12 * 60 * 60 * 1000) return;
   const mh = getMetalHoldings();
   const heldTypes = [...new Set(Object.values(mh).filter(v => v.weight > 0.001).map(v => (v.metal_type || '').split('|')[0].trim()))].filter(Boolean);
   if (!heldTypes.length) { if (manual) alert('لا توجد معادن مملوكة'); return; }
@@ -187,11 +221,7 @@ export async function autoFetchMetalPrices(manual = false) {
     const gp = extractGramPrice(data, t);
     if (gp) { await sbUpsert('metal_prices', { metal_type: t, price_per_gram: +N2(gp).toFixed(2) }); updated++; }
   }
-  if (updated > 0) {
-    localStorage.setItem('lastMetalFetchDate', todayStr);
-    localStorage.setItem('lastMetalFetchAt', new Date().toISOString());
-    localStorage.setItem('lastMetalSource', 'goldapi.io');
-  }
+
   if (btn) btn.disabled = false;
   if (updated > 0) { toast(`تم تحديث ${updated} نوع`); await reload(); }
   else if (manual) alert('تعذّر التحديث');

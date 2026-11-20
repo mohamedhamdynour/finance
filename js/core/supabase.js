@@ -5,7 +5,6 @@
 import { conn } from '../state.js';
 import { retryWithBackoff } from './network.js';
 
-const STORAGE_KEYS = { url: 'sb_url', key: 'sb_key' };
 const USER_SCOPED_TABLES = new Set([
   'banks', 'bank_transactions', 'stock_transactions', 'stock_prices',
   'metal_transactions', 'metal_prices', 'certificates', 'dividends',
@@ -14,10 +13,10 @@ const USER_SCOPED_TABLES = new Set([
   'audit_log', 'installments', 'installment_payments', 'attachments'
 ]);
 
-// ─── تحميل القيم من localStorage عند بدء التطبيق ──────────────
+// ─── تهيئة الاتصال في الذاكرة فقط ──────────────
 export function initFromStorage() {
-  conn.SB_URL = localStorage.getItem(STORAGE_KEYS.url) || '';
-  conn.SB_KEY = localStorage.getItem(STORAGE_KEYS.key) || '';
+  conn.SB_URL = '';
+  conn.SB_KEY = '';
 }
 
 // ─── ترويسات الطلبات (تستخدم access_token إن وُجد) ────────────
@@ -212,23 +211,19 @@ export async function sbPatchBy(t, filter, b) {
 // ─── إنشاء العميل (supabase-js) ────────────────────────────────
 export function createClient(url, key) {
   if (!window.supabase) throw new Error('مكتبة supabase-js غير محمّلة');
-  return window.supabase.createClient(url, key);
+  return window.supabase.createClient(url, key, { auth: { persistSession: false, autoRefreshToken: true, detectSessionInUrl: false } });
 }
 
-// ─── حفظ الاتصال في الذاكرة + localStorage ─────────────────────
+// ─── حفظ الاتصال في الذاكرة فقط ─────────────────────
 export async function connect(url, key) {
   conn.SB_URL = url;
   conn.SB_KEY = key;
-  localStorage.setItem(STORAGE_KEYS.url, url);
-  localStorage.setItem(STORAGE_KEYS.key, key);
   conn.supabaseClient = createClient(url, key);
   return conn.supabaseClient;
 }
 
 // ─── مسح الاتصال ───────────────────────────────────────────────
 export function disconnect() {
-  localStorage.removeItem(STORAGE_KEYS.url);
-  localStorage.removeItem(STORAGE_KEYS.key);
   conn.SB_URL = '';
   conn.SB_KEY = '';
   conn.supabaseClient = null;

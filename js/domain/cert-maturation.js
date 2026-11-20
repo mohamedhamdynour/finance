@@ -5,7 +5,6 @@ import { DB, conn } from '../state.js';
 import { N2, today } from '../core/utils.js';
 import { sbPost, sbPatch } from '../core/supabase.js';
 
-const LAST_RUN_KEY = 'certMaturationLastRun';
 
 /**
  * الشهادات التي انتهت ولم تُستردّ بعد.
@@ -65,16 +64,11 @@ export async function matureCert(cert) {
  */
 export async function processMaturedCerts(force = false) {
   const todayStr = today();
-  if (!force && localStorage.getItem(LAST_RUN_KEY) === todayStr) {
-    return { processed: 0, results: [], skipped: true };
-  }
-
   const uid = conn.authSession?.user?.id;
   if (!uid) return { processed: 0, results: [], skipped: true };
 
   const matured = detectMaturedCerts();
   if (!matured.length) {
-    localStorage.setItem(LAST_RUN_KEY, todayStr);
     return { processed: 0, results: [], skipped: false };
   }
 
@@ -89,6 +83,5 @@ export async function processMaturedCerts(force = false) {
     }
   }
 
-  localStorage.setItem(LAST_RUN_KEY, todayStr);
   return { processed: results.filter(r => r.ok).length, results, skipped: false };
 }
