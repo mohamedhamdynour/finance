@@ -105,7 +105,50 @@ export async function api(path, method = 'GET', body = null, opts = {}) {
 }
 
 // ─── اختصارات CRUD ─────────────────────────────────────────────
-export const sbGet = (t, q = '') => api(appendUserFilter(t + q, t));
+// ─── قراءة مع ترقيم تلقائي ─────────────────────────────────────
+// PostgREST/Supabase يقص أي قراءة بلا limit عند 1000 صف (الافتراضي) بدون أي خطأ،
+// فكانت الأرصدة والإجماليات تتحسب على بيانات ناقصة بصمت بعد 1000 عملية.
+// أي استعلام فيه limit/offset صريح يُنفَّذ كما هو. غير كده نقرأ صفحات متتالية.
+export const PAGE_SIZE = 1000;
+const MAX_PAGES = 200; // سقف أمان = 200 ألف صف؛ بعده نرمي خطأ بدل ما نرجّع بيانات ناقصة
+const TABLES_WITHOUT_ID = new Set([
+  'stock_prices', 'metal_prices', 'exchange_rates', 'portfolio_snapshots', 'app_settings'
+]);
+
+// ترتيب حتمي: نضيف id كمفتاح فك تعادل، وإلا ممكن صف يتكرر أو يتخطى بين صفحتين
+function withTieBreaker(q, table) {
+  if (TABLES_WITHOUT_ID.has(table)) return q;
+  const m = q.match(/([?&])order=([^&]*)/);
+  if (!m) return q + (q.includes('?') ? '&' : '?') + 'order=id.asc';
+  if (/(^|,)id(\.|,|$)/.test(m[2])) return q;
+  return q.replace(m[0], m[1] + 'order=' + m[2] + ',id.asc');
+}
+
+function withPage(q, offset) {
+  return q + (q.includes('?') ? '&' : '?') + 'limit=' + PAGE_SIZE + '&offset=' + offset;
+}
+
+async function fetchAllPages(t, q) {
+  const all = [];
+  for (let page = 0; page < MAX_PAGES; page++) {
+    const rows = await api(appendUserFilter(t + withPage(q, page * PAGE_SIZE), t));
+    if (!Array.isArray(rows)) return rows;
+    all.push(...rows);
+    if (rows.length < PAGE_SIZE) return all;
+  }
+  throw new Error('الجدول ' + t + ' تجاوز ' + (MAX_PAGES * PAGE_SIZE) + ' صف — القراءة اتوقفت عشان البيانات متتقصش');
+}
+
+export async function sbGet(t, q = '') {
+  if (/[?&](limit|offset)=/.test(q)) return api(appendUserFilter(t + q, t));
+  try {
+    return await fetchAllPages(t, withTieBreaker(q, t));
+  } catch (e) {
+    // جدول بلا عمود id غير مدرج في القائمة: أعد بدون فك التعادل
+    if (e && e.code === '42703' && withTieBreaker(q, t) !== q) return fetchAllPages(t, q);
+    throw e;
+  }
+}
 
 function injectUserContext(body) {
   if (!body) return body;
